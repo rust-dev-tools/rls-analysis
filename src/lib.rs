@@ -59,13 +59,13 @@ impl AnalysisHost {
     }
 
     pub fn goto_def(&self, span: &Span) -> Result<Span, ()> {
-        self.read(|a| a.refs.get(span).and_then(|id| a.defs.get(id)).map(|def| {
+        self.read(|a| a.def_id_for_span.get(span).and_then(|id| a.defs.get(id)).map(|def| {
             lowering::lower_span(&def.span, Some(&a.project_dir))
         }).ok_or(()))
     }
 
     pub fn find_all_refs(&self, span: &Span) -> Result<Vec<Span>, ()> {
-        self.read(|a| a.class_ids.get(span).and_then(|id| {
+        self.read(|a| a.def_id_for_span.get(span).and_then(|id| {
             let def = a.defs.get(id).map(|def| lowering::lower_span(&def.span, Some(&a.project_dir)));
             match a.ref_spans.get(id) {
                 Some(refs) => Some(def.into_iter().chain(refs.iter().cloned()).collect()),
@@ -75,20 +75,15 @@ impl AnalysisHost {
     }
 
     pub fn show_type(&self, span: &Span) -> Result<String, ()> {
-        self.read(|a| a.titles
-                       .get(&span)
-                       .map(|s| &**s)
-                       .or_else(|| {
-                           a.refs.get(&span).and_then(|id| {
-                               a.defs.get(id).map(|def| &*def.value)
-                           })
+        self.read(|a| a.def_id_for_span.get(&span).and_then(|id| {
+                           a.defs.get(id).map(|def| &*def.value)
                        })
                        .map(|s| s.to_owned())
                        .ok_or(()))
     }
 
     pub fn docs(&self, span: &Span) -> Result<String, ()> {
-        self.read(|a| a.class_ids.get(span).and_then(|id| {
+        self.read(|a| a.def_id_for_span.get(span).and_then(|id| {
             a.defs.get(id).map(|def| def.docs.to_owned())
         }).ok_or(()))
     }
@@ -118,15 +113,15 @@ impl AnalysisHost {
     }
 
     pub fn doc_url(&self, span: &Span) -> Result<String, ()> {
-        // https://doc.rust-lang.org/nightly/std/string/String.t.html
-        self.read(|a| a.class_ids.get(span).and_then(|id| {
+        // e.g., https://doc.rust-lang.org/nightly/std/string/String.t.html
+        self.read(|a| a.def_id_for_span.get(span).and_then(|id| {
             a.defs.get(id).and_then(|def| self.mk_doc_url(def, a))
         }).ok_or(()))
     }
 
     pub fn src_url(&self, span: &Span) -> Result<String, ()> {
-        // https://github.com/rust-lang/rust/blob/master/src/libcollections/string.rs#L261-L263
-        self.read(|a| a.class_ids.get(span).and_then(|id| {
+        // e.g., https://github.com/rust-lang/rust/blob/master/src/libcollections/string.rs#L261-L263
+        self.read(|a| a.def_id_for_span.get(span).and_then(|id| {
             a.defs.get(id).map(|def| format!("{}/{}#L{}-L{}", a.src_url_base, def.span.file_name, def.span.line_start, def.span.line_end))
         }).ok_or(()))
     }
@@ -156,8 +151,6 @@ impl AnalysisHost {
 
         match def.parent {
             Some(ref p) => {
-                // TODO am I getting the impl instead of the struct? Yes :-(
-                println!("{} parent id: {}", def.name, p);
                 let parent = match analysis.defs.get(p) {
                     Some(p) => p,
                     None => return None,
@@ -167,8 +160,6 @@ impl AnalysisHost {
                 Some(format!("{}/{}.t.html#{}.{}", analysis.doc_url_base, parent_qualpath, def.name, ns))
             }
             None => {
-                println!("no parent {} {}", def.name, def.id);
-                // TODO need the crate name
                 let qualpath = def.qualname.replace("::", "/");
                 let ns = def.kind.name_space();
                 Some(format!("{}/{}.{}.html", analysis.doc_url_base, qualpath, ns))
@@ -187,16 +178,11 @@ pub struct SymbolResult {
 
 #[derive(Debug)]
 pub struct Analysis {
-    // This only has fixed titles, not ones which use a ref.
-    // TODO not clear this is a good way to organise things tbh - use refs
-    titles: HashMap<Span, String>,
-    // Unique identifiers for identifiers with the same def (including the def).
-    class_ids: HashMap<Span, u32>,
+    // Map span to id of def (either because it is the span of the def, or of the def for the ref).
+    def_id_for_span: HashMap<Span, u32>,
     defs: HashMap<u32, Def>,
     defs_per_file: HashMap<String, Vec<u32>>,
     def_names: HashMap<String, Vec<u32>>,
-    // we don't really need this and class_ids
-    refs: HashMap<Span, u32>,
     ref_spans: HashMap<u32, Vec<Span>>,
     pub project_dir: String,
 
@@ -217,7 +203,6 @@ pub struct Span {
 #[derive(Debug)]
 pub struct Def {
     pub kind: raw::DefKind,
-    pub id: u32,
     pub span: raw::SpanData,
     pub name: String,
     pub qualname: String,
@@ -229,12 +214,10 @@ pub struct Def {
 impl Analysis {
     pub fn new(project_dir: &str) -> Analysis {
         Analysis {
-            titles: HashMap::new(),
-            class_ids: HashMap::new(),
+            def_id_for_span: HashMap::new(),
             defs: HashMap::new(),
             defs_per_file: HashMap::new(),
             def_names: HashMap::new(),
-            refs: HashMap::new(),
             ref_spans: HashMap::new(),
             project_dir: project_dir.to_owned(),
             // TODO don't hardcode these
@@ -274,17 +257,18 @@ impl Analysis {
 
     pub fn get_title(&self, lo: &Loc, hi: &Loc) -> Option<&str> {
         let span = Span::from_locs(lo, hi);
-        self.titles.get(&span).map(|s| &**s).or_else(|| self.refs.get(&span).and_then(|id| self.defs.get(id).map(|def| &*def.value)))
+        self.def_id_for_span.get(&span).and_then(|id| self.defs.get(id).map(|def| &*def.value))
     }
 
     pub fn get_class_id(&self, lo: &Loc, hi: &Loc) -> Option<u32> {
         let span = Span::from_locs(lo, hi);
-        self.class_ids.get(&span).map(|i| *i)
+        self.def_id_for_span.get(&span).map(|i| *i)
     }
 
+    // Basically goto def
     pub fn get_link(&self, lo: &Loc, hi: &Loc) -> Option<String> {
         let span = Span::from_locs(lo, hi);
-        self.refs.get(&span).and_then(|id| self.defs.get(id)).map(|def| {
+        self.def_id_for_span.get(&span).and_then(|id| self.defs.get(id)).map(|def| {
             let s = &def.span;
             format!("{}:{}:{}:{}:{}", s.file_name, s.line_start, s.column_start, s.line_end, s.column_end)
         })

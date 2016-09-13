@@ -140,6 +140,7 @@ pub enum DefKind {
     Static,
     Const,
     Field,
+    Import,
 }
 
 impl DefKind {
@@ -158,6 +159,7 @@ impl DefKind {
             DefKind::Const |
             DefKind::Field => 'v',
             DefKind::Macro => 'm',
+            DefKind::Import => { panic!("No namespace for imports"); }
         }
     }
 }

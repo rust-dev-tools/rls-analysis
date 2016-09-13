@@ -63,37 +63,48 @@ impl CrateReader {
         }
     }
 
-    fn read_crate(analysis: &mut Analysis, master_crate_map: &mut HashMap<String, u8>, krate: raw::Analysis, project_dir: &str) {
+    fn read_crate(analysis: &mut Analysis,
+                  master_crate_map: &mut HashMap<String, u8>,
+                  krate: raw::Analysis,
+                  project_dir: &str) {
         let crate_name = krate.prelude.as_ref().unwrap().crate_name.clone();
         let reader = CrateReader::from_prelude(krate.prelude.unwrap(), master_crate_map);
 
         for i in krate.imports {
-            analysis.titles.insert(lower_span(&i.span, Some(project_dir)), i.value);
+            let span = lower_span(&i.span, Some(project_dir));
+            let id = reader.id_from_compiler_id(&i.id);
+            analysis.def_id_for_span.insert(span, id);
+
+            let def = Def {
+                kind: raw::DefKind::Import,
+                span: i.span,
+                name: i.name,
+                value: i.value,
+                qualname: String::new(),
+                parent: None,
+                docs: String::new(),
+            };
+            analysis.defs.insert(id, def);
         }
         for mut d in krate.defs {
             let span = lower_span(&d.span, Some(project_dir));
-            if !d.value.is_empty() && krate.kind == Format::Json {
-                analysis.titles.insert(span.clone(), d.value.clone());
-            }
             let id = reader.id_from_compiler_id(&d.id);
             if id != NULL && !analysis.defs.contains_key(&id) {
                 if krate.kind == Format::Json {
                     let file_name = span.file_name.clone();
                     analysis.defs_per_file.entry(file_name).or_insert_with(|| vec![]).push(id);
 
-                    analysis.class_ids.insert(span, id);
+                    analysis.def_id_for_span.insert(span, id);
                     analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
                 } else {
-                    // TODO info to make doc & source URLs
-
                     // TODO gross hack - take me out, and do something better in rustc
+                    // TODO shit, I can't even remember why we do this - it makes no sense :-s
                     if d.kind == super::raw::DefKind::Struct {
                         d.value = String::new();
                     }
                 }
                 let def = Def {
                     kind: d.kind,
-                    id: id,
                     span: d.span,
                     name: d.name,
                     value: d.value,
@@ -110,15 +121,13 @@ impl CrateReader {
             }
         }
         for r in krate.refs {
-            let id = reader.id_from_compiler_id(&r.ref_id);
+            let def_id = reader.id_from_compiler_id(&r.ref_id);
             let span = lower_span(&r.span, Some(project_dir));
-            if id != NULL && analysis.defs.contains_key(&id) && !analysis.refs.contains_key(&span) {
+            if def_id != NULL && analysis.defs.contains_key(&def_id) && !analysis.def_id_for_span.contains_key(&span) {
 
                 //println!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, id);
-                // TODO class_ids = refs + defs.keys
-                analysis.class_ids.insert(span.clone(), id);
-                analysis.refs.insert(span.clone(), id);
-                analysis.ref_spans.entry(id).or_insert_with(|| vec![]).push(span);
+                analysis.def_id_for_span.insert(span.clone(), def_id);
+                analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
             }
         }
     }
