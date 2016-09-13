@@ -14,7 +14,7 @@ use super::{Analysis, Span, NULL, Def};
 use std::collections::HashMap;
 
 pub fn lower(raw_analysis: Vec<raw::Analysis>, project_dir: &str) -> Analysis {
-    let mut result = Analysis::new(project_dir);
+    let mut result = Analysis::new();
     let mut master_crate_map = HashMap::new();
     for krate in raw_analysis.into_iter() {
         CrateReader::read_crate(&mut result, &mut master_crate_map, krate, project_dir);
@@ -73,11 +73,11 @@ impl CrateReader {
         for i in krate.imports {
             let span = lower_span(&i.span, Some(project_dir));
             let id = reader.id_from_compiler_id(&i.id);
-            analysis.def_id_for_span.insert(span, id);
+            analysis.def_id_for_span.insert(span.clone(), id);
 
             let def = Def {
                 kind: raw::DefKind::Import,
-                span: i.span,
+                span: span,
                 name: i.name,
                 value: i.value,
                 qualname: String::new(),
@@ -94,7 +94,7 @@ impl CrateReader {
                     let file_name = span.file_name.clone();
                     analysis.defs_per_file.entry(file_name).or_insert_with(|| vec![]).push(id);
 
-                    analysis.def_id_for_span.insert(span, id);
+                    analysis.def_id_for_span.insert(span.clone(), id);
                     analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
                 } else {
                     // TODO gross hack - take me out, and do something better in rustc
@@ -105,7 +105,7 @@ impl CrateReader {
                 }
                 let def = Def {
                     kind: d.kind,
-                    span: d.span,
+                    span: span,
                     name: d.name,
                     value: d.value,
                     qualname: format!("{}{}", crate_name, d.qualname),
@@ -132,7 +132,6 @@ impl CrateReader {
         }
     }
 
-    // TODO need to handle std libraries too.
     fn id_from_compiler_id(&self, id: &raw::CompilerId) -> u32 {
         if id.krate == NULL || id.index == NULL {
             return NULL;

@@ -59,14 +59,12 @@ impl AnalysisHost {
     }
 
     pub fn goto_def(&self, span: &Span) -> Result<Span, ()> {
-        self.read(|a| a.def_id_for_span.get(span).and_then(|id| a.defs.get(id)).map(|def| {
-            lowering::lower_span(&def.span, Some(&a.project_dir))
-        }).ok_or(()))
+        self.read(|a| a.def_id_for_span.get(span).and_then(|id| a.defs.get(id)).map(|def| def.span.clone()).ok_or(()))
     }
 
     pub fn find_all_refs(&self, span: &Span) -> Result<Vec<Span>, ()> {
         self.read(|a| a.def_id_for_span.get(span).and_then(|id| {
-            let def = a.defs.get(id).map(|def| lowering::lower_span(&def.span, Some(&a.project_dir)));
+            let def = a.defs.get(id).map(|def| def.span.clone());
             match a.ref_spans.get(id) {
                 Some(refs) => Some(def.into_iter().chain(refs.iter().cloned()).collect()),
                 None => def.map(|s| vec![s]),
@@ -105,7 +103,7 @@ impl AnalysisHost {
                 SymbolResult {
                     id: *id,
                     name: def.name.clone(),
-                    span: lowering::lower_span(&def.span, Some(&a.project_dir)),
+                    span: def.span.clone(),
                     kind: def.kind.clone(),
                 }
             }).collect()).ok_or(())
@@ -184,7 +182,6 @@ pub struct Analysis {
     defs_per_file: HashMap<String, Vec<u32>>,
     def_names: HashMap<String, Vec<u32>>,
     ref_spans: HashMap<u32, Vec<Span>>,
-    pub project_dir: String,
 
     pub doc_url_base: String,
     pub src_url_base: String,
@@ -203,7 +200,7 @@ pub struct Span {
 #[derive(Debug)]
 pub struct Def {
     pub kind: raw::DefKind,
-    pub span: raw::SpanData,
+    pub span: Span,
     pub name: String,
     pub qualname: String,
     pub parent: Option<u32>,
@@ -212,14 +209,13 @@ pub struct Def {
 }
 
 impl Analysis {
-    pub fn new(project_dir: &str) -> Analysis {
+    pub fn new() -> Analysis {
         Analysis {
             def_id_for_span: HashMap::new(),
             defs: HashMap::new(),
             defs_per_file: HashMap::new(),
             def_names: HashMap::new(),
             ref_spans: HashMap::new(),
-            project_dir: project_dir.to_owned(),
             // TODO don't hardcode these
             doc_url_base: "https://doc.rust-lang.org/nightly".to_owned(),
             src_url_base: "https://github.com/rust-lang/rust/blob/master".to_owned(),
@@ -241,7 +237,7 @@ impl Analysis {
     }
 
     pub fn lookup_def_span(&self, id: u32) -> Span {
-        lowering::lower_span(&self.defs[&id].span, None)
+        self.defs[&id].span.clone()
     }
 
     pub fn lookup_refs(&self, id: u32) -> &[Span] {
@@ -251,7 +247,7 @@ impl Analysis {
     pub fn get_spans(&self, id: u32) -> Vec<Span> {
         let mut result = self.lookup_refs(id).to_owned();
         // TODO what if lookup_def panics
-        result.push(lowering::lower_span(&self.lookup_def(id).span, Some(&self.project_dir)));
+        result.push(self.lookup_def(id).span.clone());
         result
     }
 
