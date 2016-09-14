@@ -34,21 +34,19 @@ use syntax::codemap::Loc;
 
 pub struct AnalysisHost {
     analysis: Mutex<Option<Analysis>>,
-    path_prefix: String,
     target: Target,
 }
 
 impl AnalysisHost {
-    pub fn new(path_prefix: &str, target: Target) -> AnalysisHost {
+    pub fn new(target: Target) -> AnalysisHost {
         AnalysisHost {
             analysis: Mutex::new(None),
-            path_prefix: path_prefix.to_owned(),
             target: target,
         }
     }
 
-    pub fn reload(&self) -> Result<(), ()> {
-        let new_analysis = Analysis::read(&self.path_prefix, self.target);
+    pub fn reload(&self, path_prefix: &str) -> Result<(), ()> {
+        let new_analysis = Analysis::read(path_prefix, self.target);
         match self.analysis.lock() {
             Ok(mut a) => {
                 *a = Some(new_analysis);
