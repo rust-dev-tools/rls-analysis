@@ -9,7 +9,7 @@
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
 use super::raw::{self, Format};
-use super::{Analysis, Span, NULL, Def};
+use super::{Analysis, PerCrateAnalysis, Span, NULL, Def};
 
 use std::collections::HashMap;
 
@@ -41,14 +41,17 @@ pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&str>) -> Span {
 
 struct CrateReader {
     crate_map: Vec<u8>,
+    project_dir: String,
+    crate_name: String,
 }
 
 impl CrateReader {
-    fn from_prelude(mut prelude: raw::CratePreludeData, master_crate_map: &mut HashMap<String, u8>) -> CrateReader {
-        // println!("building crate map for {}", prelude.crate_name);
+    fn from_prelude(mut prelude: raw::CratePreludeData, master_crate_map: &mut HashMap<String, u8>, project_dir: &str) -> CrateReader {
+        let crate_name = prelude.crate_name.clone();
+        // println!("building crate map for {}", crate_name);
         let next = master_crate_map.len() as u8;
-        let mut crate_map = vec![*master_crate_map.entry(prelude.crate_name.clone()).or_insert_with(|| next)];
-        // println!("  {} -> {}", prelude.crate_name, master_crate_map[&prelude.crate_name]);
+        let mut crate_map = vec![*master_crate_map.entry(crate_name.clone()).or_insert_with(|| next)];
+        // println!("  {} -> {}", crate_name, master_crate_map[&crate_name]);
 
         prelude.external_crates.sort_by(|a, b| a.num.cmp(&b.num));
         for c in prelude.external_crates {
@@ -60,19 +63,30 @@ impl CrateReader {
 
         CrateReader {
             crate_map: crate_map,
+            project_dir: project_dir.to_owned(),
+            crate_name: crate_name,
         }
     }
 
-    fn read_crate(analysis: &mut Analysis,
+    fn read_crate(project_analysis: &mut Analysis,
                   master_crate_map: &mut HashMap<String, u8>,
                   krate: raw::Analysis,
                   project_dir: &str) {
-        let crate_name = krate.prelude.as_ref().unwrap().crate_name.clone();
-        let reader = CrateReader::from_prelude(krate.prelude.unwrap(), master_crate_map);
+        let reader = CrateReader::from_prelude(krate.prelude.unwrap(), master_crate_map, project_dir);
 
-        for i in krate.imports {
-            let span = lower_span(&i.span, Some(project_dir));
-            let id = reader.id_from_compiler_id(&i.id);
+        let mut per_crate = PerCrateAnalysis::new();
+
+        reader.read_imports(krate.imports, &mut per_crate);
+        reader.read_defs(krate.defs, &mut per_crate, krate.kind == Format::JsonApi);
+        reader.read_refs(krate.refs, &mut per_crate, project_analysis);
+
+        project_analysis.per_crate.insert(reader.crate_name, per_crate);
+    }
+
+    fn read_imports(&self, imports: Vec<raw::Import>, analysis: &mut PerCrateAnalysis) {
+        for i in imports {
+            let span = lower_span(&i.span, Some(&self.project_dir));
+            let id = self.id_from_compiler_id(&i.id);
             analysis.def_id_for_span.insert(span.clone(), id);
 
             let def = Def {
@@ -86,30 +100,33 @@ impl CrateReader {
             };
             analysis.defs.insert(id, def);
         }
-        for mut d in krate.defs {
-            let span = lower_span(&d.span, Some(project_dir));
-            let id = reader.id_from_compiler_id(&d.id);
-            if id != NULL && !analysis.defs.contains_key(&id) {
-                if krate.kind == Format::Json {
-                    let file_name = span.file_name.clone();
-                    analysis.defs_per_file.entry(file_name).or_insert_with(|| vec![]).push(id);
+    }
 
-                    analysis.def_id_for_span.insert(span.clone(), id);
-                    analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
-                } else {
+    fn read_defs(&self, defs: Vec<raw::Def>, analysis: &mut PerCrateAnalysis, api_crate: bool) {
+        for mut d in defs {
+            let span = lower_span(&d.span, Some(&self.project_dir));
+            let id = self.id_from_compiler_id(&d.id);
+            if id != NULL && !analysis.defs.contains_key(&id) {
+                if api_crate {
                     // TODO gross hack - take me out, and do something better in rustc
                     // TODO shit, I can't even remember why we do this - it makes no sense :-s
                     if d.kind == super::raw::DefKind::Struct {
                         d.value = String::new();
                     }
+                } else {
+                    let file_name = span.file_name.clone();
+                    analysis.defs_per_file.entry(file_name).or_insert_with(|| vec![]).push(id);
+
+                    analysis.def_id_for_span.insert(span.clone(), id);
+                    analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
                 }
                 let def = Def {
                     kind: d.kind,
                     span: span,
                     name: d.name,
                     value: d.value,
-                    qualname: format!("{}{}", crate_name, d.qualname),
-                    parent: d.parent.map(|id| reader.id_from_compiler_id(&id)),
+                    qualname: format!("{}{}", self.crate_name, d.qualname),
+                    parent: d.parent.map(|id| self.id_from_compiler_id(&id)),
                     docs: if let Some(index) = d.docs.find("\n\n") {
                         d.docs[..index].to_owned()
                     } else {
@@ -120,11 +137,14 @@ impl CrateReader {
                 analysis.defs.insert(id, def);
             }
         }
-        for r in krate.refs {
-            let def_id = reader.id_from_compiler_id(&r.ref_id);
-            let span = lower_span(&r.span, Some(project_dir));
-            if def_id != NULL && analysis.defs.contains_key(&def_id) && !analysis.def_id_for_span.contains_key(&span) {
+    }
 
+    fn read_refs(&self, refs: Vec<raw::Ref>, analysis: &mut PerCrateAnalysis, project_analysis: &Analysis) {
+        for r in refs {
+            let def_id = self.id_from_compiler_id(&r.ref_id);
+            let span = lower_span(&r.span, Some(&self.project_dir));
+            if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) &&
+               (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id)) {
                 //println!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, id);
                 analysis.def_id_for_span.insert(span.clone(), def_id);
                 analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
