@@ -39,7 +39,7 @@ use std::time::SystemTime;
 
 pub struct AnalysisHost {
     analysis: Mutex<Option<Analysis>>,
-    path_prefix: String,
+    path_prefix: Mutex<Option<String>>,
     target: Target,
     master_crate_map: Mutex<HashMap<String, u32>>,
 }
@@ -51,34 +51,42 @@ macro_rules! clone_field {
 }
 
 impl AnalysisHost {
-    pub fn new(path_prefix: &str, target: Target) -> AnalysisHost {
+    pub fn new(target: Target) -> AnalysisHost {
         AnalysisHost {
             analysis: Mutex::new(None),
-            path_prefix: path_prefix.to_owned(),
+            path_prefix: Mutex::new(None),
             target: target,
             master_crate_map: Mutex::new(HashMap::new()),
         }
     }
 
-    pub fn reload(&self) -> AResult<()> {
+    pub fn reload(&self, path_prefix: &str) -> AResult<()> {
+        let mut needs_hard_reload = false;
+        match self.path_prefix.lock() {
+            Ok(pp) => {
+                if pp.is_none() || pp.as_ref().unwrap() != path_prefix {
+                    needs_hard_reload = true;
+                }
+            }
+            _ => return Err(()),
+        }
         let timestamps = match self.analysis.lock() {
             Ok(a) => {
                 match &*a {
-                    &Some(ref a) => Some(a.timestamps()),
-                    &None => None,
+                    &Some(ref a) => a.timestamps(),
+                    &None => { needs_hard_reload = true; HashMap::new() },
                 }
             }
             Err(_) => return Err(()),
         };
 
-        let timestamps = match timestamps {
-            Some(ts) => ts,
-            None => return self.hard_reload(),
-        };
+        if needs_hard_reload {
+            return self.hard_reload(path_prefix);
+        }
 
-        let raw_analysis = raw::Analysis::read_incremental(&self.path_prefix, self.target, timestamps);
+        let raw_analysis = raw::Analysis::read_incremental(path_prefix, self.target, timestamps);
 
-        lowering::lower(raw_analysis, self.mk_project_dir(), self, |host, per_crate, path| {
+        lowering::lower(raw_analysis, Self::mk_project_dir(path_prefix), self, |host, per_crate, path| {
             match host.analysis.lock() {
                 Ok(mut a) => {
                     a.as_mut().unwrap().update(per_crate, path);
@@ -90,18 +98,24 @@ impl AnalysisHost {
     }
 
     // Reloads the entire project's analysis data.
-    pub fn hard_reload(&self) -> AResult<()> {
-        let raw_analysis = raw::Analysis::read(&self.path_prefix, self.target);
+    pub fn hard_reload(&self, path_prefix: &str) -> AResult<()> {
+        let raw_analysis = raw::Analysis::read(path_prefix, self.target);
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.
-        let mut new_host = AnalysisHost::new(&self.path_prefix, self.target);
+        let mut new_host = AnalysisHost::new(self.target);
         new_host.analysis = Mutex::new(Some(Analysis::new()));
-        lowering::lower(raw_analysis, self.mk_project_dir(), &mut new_host, |host, per_crate, path| {
+        lowering::lower(raw_analysis, Self::mk_project_dir(path_prefix), &mut new_host, |host, per_crate, path| {
             host.analysis.lock().unwrap().as_mut().unwrap().per_crate.insert(path, per_crate);
             Ok(())
         })?;
 
+        match self.path_prefix.lock() {
+            Ok(mut pp) => {
+                *pp = Some(path_prefix.to_owned());
+            }
+            Err(_) => return Err(()),
+        }
         match self.master_crate_map.lock() {
             Ok(mut mcm) => {
                 *mcm = new_host.master_crate_map.into_inner().unwrap();
@@ -117,8 +131,8 @@ impl AnalysisHost {
         }
     }
 
-    fn mk_project_dir(&self) -> String {
-        format!("{}/{}", env::current_dir().unwrap().display(), self.path_prefix)
+    fn mk_project_dir(path_prefix: &str) -> String {
+        format!("{}/{}", env::current_dir().unwrap().display(), path_prefix)
     }
 
     pub fn has_def(&self, id: u32) -> bool {
