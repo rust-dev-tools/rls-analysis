@@ -9,18 +9,20 @@
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
 use super::raw::{self, Format};
-use super::{Analysis, PerCrateAnalysis, Span, NULL, Def};
+use super::{AnalysisHost, PerCrateAnalysis, Span, NULL, Def};
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
-pub fn lower(raw_analysis: Vec<raw::Analysis>, project_dir: &str) -> Analysis {
-    let mut result = Analysis::new();
-    let mut master_crate_map = HashMap::new();
-    for krate in raw_analysis.into_iter() {
-        CrateReader::read_crate(&mut result, &mut master_crate_map, krate, project_dir);
+pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: String, analysis: &AnalysisHost, mut f: F) -> Result<(), ()>
+    where F: FnMut(&AnalysisHost, PerCrateAnalysis, PathBuf) -> Result<(), ()>
+{
+    for c in raw_analysis.into_iter() {
+        let (per_crate, path) = CrateReader::read_crate(analysis, c, &project_dir);
+        f(analysis, per_crate, path)?;
     }
 
-    result
+    Ok(())
 }
 
 pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&str>) -> Span {
@@ -30,6 +32,7 @@ pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&str>) -> Span {
     } else {
         format!("{}/{}", project_dir.expect("Required project directory, but not supplied"), file_name)
     };
+
     Span {
         file_name: file_name,
         line_start: raw_span.line_start,
@@ -40,23 +43,26 @@ pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&str>) -> Span {
 }
 
 struct CrateReader {
-    crate_map: Vec<u8>,
+    crate_map: Vec<u32>,
     project_dir: String,
     crate_name: String,
 }
 
 impl CrateReader {
-    fn from_prelude(mut prelude: raw::CratePreludeData, master_crate_map: &mut HashMap<String, u8>, project_dir: &str) -> CrateReader {
+    fn from_prelude(mut prelude: raw::CratePreludeData,
+                    master_crate_map: &mut HashMap<String, u32>,
+                    project_dir: &str)
+                    -> CrateReader {
         let crate_name = prelude.crate_name.clone();
         // println!("building crate map for {}", crate_name);
-        let next = master_crate_map.len() as u8;
+        let next = master_crate_map.len() as u32;
         let mut crate_map = vec![*master_crate_map.entry(crate_name.clone()).or_insert_with(|| next)];
         // println!("  {} -> {}", crate_name, master_crate_map[&crate_name]);
 
         prelude.external_crates.sort_by(|a, b| a.num.cmp(&b.num));
         for c in prelude.external_crates {
             assert!(c.num == crate_map.len() as u32);
-            let next = master_crate_map.len() as u8;
+            let next = master_crate_map.len() as u32;
             crate_map.push(*master_crate_map.entry(c.name.clone()).or_insert_with(|| next));
             // println!("  {} -> {}", c.name, master_crate_map[&c.name]);
         }
@@ -68,19 +74,26 @@ impl CrateReader {
         }
     }
 
-    fn read_crate(project_analysis: &mut Analysis,
-                  master_crate_map: &mut HashMap<String, u8>,
-                  krate: raw::Analysis,
-                  project_dir: &str) {
-        let reader = CrateReader::from_prelude(krate.prelude.unwrap(), master_crate_map, project_dir);
+    fn read_crate(project_analysis: &AnalysisHost,
+                  krate: raw::Crate,
+                  project_dir: &str)
+                  -> (PerCrateAnalysis, PathBuf) {
+        let reader = CrateReader::from_prelude(krate.analysis.prelude.unwrap(),
+                                               &mut project_analysis.master_crate_map.lock().unwrap(),
+                                               project_dir);
 
         let mut per_crate = PerCrateAnalysis::new();
 
-        reader.read_imports(krate.imports, &mut per_crate);
-        reader.read_defs(krate.defs, &mut per_crate, krate.kind == Format::JsonApi);
-        reader.read_refs(krate.refs, &mut per_crate, project_analysis);
+        let api_crate = krate.analysis.kind == Format::JsonApi;
+        if !api_crate {
+            per_crate.timestamp = Some(krate.timestamp);
+        }
 
-        project_analysis.per_crate.insert(reader.crate_name, per_crate);
+        reader.read_imports(krate.analysis.imports, &mut per_crate);
+        reader.read_defs(krate.analysis.defs, &mut per_crate, api_crate);
+        reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
+
+        (per_crate, krate.path)
     }
 
     fn read_imports(&self, imports: Vec<raw::Import>, analysis: &mut PerCrateAnalysis) {
@@ -139,7 +152,7 @@ impl CrateReader {
         }
     }
 
-    fn read_refs(&self, refs: Vec<raw::Ref>, analysis: &mut PerCrateAnalysis, project_analysis: &Analysis) {
+    fn read_refs(&self, refs: Vec<raw::Ref>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost) {
         for r in refs {
             let def_id = self.id_from_compiler_id(&r.ref_id);
             let span = lower_span(&r.span, Some(&self.project_dir));

@@ -8,7 +8,9 @@
 
 // FIXME this whole crate all needs *lots* of optimisation.
 //   could try using non-crypto hashing for perf
+//      https://cdn.rawgit.com/Gankro/hash-rs/7b9cf787a830c1e52dcaf6ec37d2985c8a30bce1/index.html
 //   keep a reference to the current crate and start all 'local' searches there before iterating the crate map
+//   for looking up ids, we can use the crate part of the id to narrow the search, rather than searching all crates
 
 #![feature(question_mark)]
 #![feature(const_fn)]
@@ -30,13 +32,16 @@ mod listings;
 pub use self::raw::Target;
 use std::collections::HashMap;
 use std::env;
+use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::SystemTime;
 // use syntax::codemap::Loc;
 
 pub struct AnalysisHost {
     analysis: Mutex<Option<Analysis>>,
     path_prefix: String,
     target: Target,
+    master_crate_map: Mutex<HashMap<String, u32>>,
 }
 
 pub type AResult<T> = Result<T, ()>;
@@ -51,17 +56,75 @@ impl AnalysisHost {
             analysis: Mutex::new(None),
             path_prefix: path_prefix.to_owned(),
             target: target,
+            master_crate_map: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn reload(&self) -> AResult<()> {
-        let new_analysis = Analysis::read(&self.path_prefix, self.target);
+        let timestamps = match self.analysis.lock() {
+            Ok(a) => {
+                match &*a {
+                    &Some(ref a) => Some(a.timestamps()),
+                    &None => None,
+                }
+            }
+            Err(_) => return Err(()),
+        };
+
+        let timestamps = match timestamps {
+            Some(ts) => ts,
+            None => return self.hard_reload(),
+        };
+
+        let raw_analysis = raw::Analysis::read_incremental(&self.path_prefix, self.target, timestamps);
+
+        lowering::lower(raw_analysis, self.mk_project_dir(), self, |host, per_crate, path| {
+            match host.analysis.lock() {
+                Ok(mut a) => {
+                    a.as_mut().unwrap().update(per_crate, path);
+                    Ok(())
+                }
+                Err(_) => Err(()),
+            }
+        })
+    }
+
+    // Reloads the entire project's analysis data.
+    pub fn hard_reload(&self) -> AResult<()> {
+        let raw_analysis = raw::Analysis::read(&self.path_prefix, self.target);
+
+        // We're going to create a dummy AnalysisHost that we will fill with data,
+        // then once we're done, we'll swap its data into self.
+        let mut new_host = AnalysisHost::new(&self.path_prefix, self.target);
+        new_host.analysis = Mutex::new(Some(Analysis::new()));
+        lowering::lower(raw_analysis, self.mk_project_dir(), &mut new_host, |host, per_crate, path| {
+            host.analysis.lock().unwrap().as_mut().unwrap().per_crate.insert(path, per_crate);
+            Ok(())
+        })?;
+
+        match self.master_crate_map.lock() {
+            Ok(mut mcm) => {
+                *mcm = new_host.master_crate_map.into_inner().unwrap();
+            }
+            Err(_) => return Err(()),
+        }
         match self.analysis.lock() {
             Ok(mut a) => {
-                *a = Some(new_analysis);
+                *a = Some(new_host.analysis.into_inner().unwrap().unwrap());
                 Ok(())
             }
             Err(_) => Err(()),
+        }
+    }
+
+    fn mk_project_dir(&self) -> String {
+        format!("{}/{}", env::current_dir().unwrap().display(), self.path_prefix)
+    }
+
+    pub fn has_def(&self, id: u32) -> bool {
+        match self.analysis.lock() {
+            Ok(a) => a.as_ref().unwrap().has_def(id),
+            _ => false,
         }
     }
 
@@ -204,7 +267,7 @@ impl SymbolResult {
 
 #[derive(Debug)]
 pub struct Analysis {
-    per_crate: HashMap<String, PerCrateAnalysis>,
+    per_crate: HashMap<PathBuf, PerCrateAnalysis>,
 
     pub doc_url_base: String,
     pub src_url_base: String,
@@ -219,9 +282,7 @@ pub struct PerCrateAnalysis {
     def_names: HashMap<String, Vec<u32>>,
     ref_spans: HashMap<u32, Vec<Span>>,
 
-    // TODO
-    // timestamp
-    // crate kind (local, api, std)
+    timestamp: Option<SystemTime>,
 }
 
 #[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
@@ -253,6 +314,7 @@ impl PerCrateAnalysis {
             defs_per_file: HashMap::new(),
             def_names: HashMap::new(),
             ref_spans: HashMap::new(),
+            timestamp: None,
         }
     }    
 }
@@ -267,10 +329,12 @@ impl Analysis {
         }
     }
 
-    pub fn read(path_prefix: &str, target: Target) -> Analysis {
-        let raw_analysis = raw::Analysis::read(path_prefix, target);
-        let project_dir = format!("{}/{}", env::current_dir().unwrap().display(), path_prefix);
-        lowering::lower(raw_analysis, &project_dir)
+    fn timestamps(&self) -> HashMap<PathBuf, Option<SystemTime>> {
+        self.per_crate.iter().map(|(s, pc)| (s.clone(), pc.timestamp)).collect()
+    }
+
+    fn update(&mut self, per_crate: PerCrateAnalysis, path: PathBuf) {
+        self.per_crate.insert(path, per_crate);
     }
 
     fn has_def(&self, id: u32) -> bool {

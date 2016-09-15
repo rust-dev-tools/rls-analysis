@@ -12,10 +12,12 @@ use serde;
 use serde::Deserialize;
 use serde_json;
 
-use std::path::Path;
+use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 #[derive(Deserialize, Debug)]
 pub struct Analysis {
@@ -40,6 +42,22 @@ pub enum Format {
     JsonApi,
 }
 
+pub struct Crate {
+    pub analysis: Analysis,
+    pub timestamp: SystemTime,
+    pub path: PathBuf,
+}
+
+impl Crate {
+    fn new(analysis: Analysis, timestamp: SystemTime, path: PathBuf) -> Crate {
+        Crate {
+            analysis: analysis,
+            timestamp: timestamp,
+            path: path
+        }
+    }
+}
+
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -50,45 +68,81 @@ impl fmt::Display for Target {
 }
 
 impl Analysis {
-    pub fn read(path_prefix: &str, target: Target) -> Vec<Analysis> {
-        let mut result = vec![];
+    pub fn read_incremental(path_prefix: &str,
+                            target: Target,
+                            timestamps: HashMap<PathBuf, Option<SystemTime>>)
+                            -> Vec<Crate> {
+        Self::iter_paths(path_prefix, target, |p| {
+            use std::time::*;
+            let t = Instant::now();
 
+            let mut result = vec![];
+
+            let listing = match DirectoryListing::from_path(p) {
+                Ok(l) => l,
+                Err(_) => { return result; },
+            };
+
+            for l in listing.files {
+                if let ListingKind::File(ref time) = l.kind {
+                    let mut path = p.to_path_buf();
+                    path.push(&l.name);
+
+                    match timestamps.get(&path) {
+                        Some(&Some(ref t)) => {
+                            if time > t {
+                                Self::read_crate_data(&path).map(|a| result.push(Crate::new(a, time.clone(), path)));
+                            }
+                        }
+                        // A crate we should never need to refresh.
+                        Some(&None) => {}
+                        // A crate we've never seen before.
+                        None => {
+                            Self::read_crate_data(&path).map(|a| result.push(Crate::new(a, time.clone(), path)));
+                        }
+                    }
+                }
+            }
+
+            let d = t.elapsed();
+            // TODO formatting of nanos is bogus
+            println!("reading {} in {}.{}s", p.display(), d.as_secs(), d.subsec_nanos());
+
+            return result;
+        })
+    }
+
+    pub fn read(path_prefix: &str, target: Target) -> Vec<Crate> {
+        Self::read_incremental(path_prefix, target, HashMap::new())
+    }
+
+    fn read_crate_data(path: &Path) -> Option<Analysis> {
+        // TODO unwraps
+        let mut file = File::open(&path).unwrap();
+        let mut buf = String::new();
+        file.read_to_string(&mut buf).unwrap();
+        match serde_json::from_str(&buf) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                println!("Error reading raw analysis: {}", e);
+                None
+            }
+        }
+    }
+
+    fn iter_paths<F, T>(path_prefix: &str, target: Target, f: F) -> Vec<T>
+        where F: Fn(&Path) -> Vec<T>
+    {
         // TODO shouldn't hard-code these paths, it's cargo-specific
-        // TODO deps path allows to break out of sandbox - is that Ok?
+        // TODO deps path allows to break out of 'sandbox' - is that Ok?
         let principle_path = format!("{}/target/{}/save-analysis", path_prefix, target);
         let deps_path = format!("{}/target/{}/deps/save-analysis", path_prefix, target);
         let libs_path = format!("{}/libs/save-analysis", path_prefix);
         let paths = &[&Path::new(&libs_path),
                       &Path::new(&deps_path),
                       &Path::new(&principle_path)];
-        for p in paths {
-            use std::time::*;
-            let t = Instant::now();
 
-            let listing = match DirectoryListing::from_path(p) {
-                Ok(l) => l,
-                Err(_) => { continue; },
-            };
-            for l in &listing.files {
-                if l.kind == ListingKind::File {
-                    let mut path = p.to_path_buf();
-                    path.push(&l.name);
-                    // TODO unwraps
-                    let mut file = File::open(&path).unwrap();
-                    let mut buf = String::new();
-                    file.read_to_string(&mut buf).unwrap();
-                    match serde_json::from_str(&buf) {
-                        Ok(a) => result.push(a),
-                        Err(e) => println!("Error reading raw analysis: {}", e),
-                    }
-                }
-            }
-
-            let d = t.elapsed();
-            println!("reading {} in {}.{}s", p.display(), d.as_secs(), d.subsec_nanos());
-        }
-
-        result
+        paths.iter().flat_map(|p| f(p).into_iter()).collect()
     }
 }
 

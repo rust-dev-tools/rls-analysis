@@ -7,23 +7,25 @@
 // except according to those terms.
 
 use std::path::Path;
+use std::time::SystemTime;
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct DirectoryListing {
     pub path: Vec<String>,
     pub files: Vec<Listing>,
 }
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Listing {
     pub kind: ListingKind,
     pub name: String,
 }
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ListingKind {
     Directory,
-    File,
+    // Time last modified.
+    File(SystemTime),
 }
 
 impl DirectoryListing {
@@ -40,7 +42,10 @@ impl DirectoryListing {
                     if file_type.is_dir() {
                         files.push(Listing { kind: ListingKind::Directory, name: name });
                     } else if file_type.is_file() {
-                        files.push(Listing { kind: ListingKind::File, name: name });
+                        files.push(Listing {
+                            kind: ListingKind::File(entry.metadata().unwrap().modified().unwrap()),
+                            name: name,
+                        });
                     }
                 }
             }
