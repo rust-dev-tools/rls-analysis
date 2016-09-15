@@ -105,8 +105,7 @@ impl Analysis {
             }
 
             let d = t.elapsed();
-            // TODO formatting of nanos is bogus
-            println!("reading {} in {}.{}s", p.display(), d.as_secs(), d.subsec_nanos());
+            println!("reading {} crates from {} in {}.{:09}s", result.len(), p.display(), d.as_secs(), d.subsec_nanos());
 
             return result;
         })
