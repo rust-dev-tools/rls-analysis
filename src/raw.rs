@@ -74,6 +74,7 @@ impl Analysis {
                             -> Vec<Crate> {
         Self::iter_paths(path_prefix, target, |p| {
             use std::time::*;
+
             let t = Instant::now();
 
             let mut result = vec![];

@@ -6,12 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// FIXME this whole crate all needs *lots* of optimisation.
-//   could try using non-crypto hashing for perf
-//      https://cdn.rawgit.com/Gankro/hash-rs/7b9cf787a830c1e52dcaf6ec37d2985c8a30bce1/index.html
-//   keep a reference to the current crate and start all 'local' searches there before iterating the crate map
-//   for looking up ids, we can use the crate part of the id to narrow the search, rather than searching all crates
-
 #![feature(question_mark)]
 #![feature(const_fn)]
 #![feature(custom_derive, plugin)]

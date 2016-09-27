@@ -33,12 +33,13 @@ pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&str>) -> Span {
         format!("{}/{}", project_dir.expect("Required project directory, but not supplied"), file_name)
     };
 
+    // Rustc uses 1-indexed rows and columns, the RLS uses 0-indexed.
     Span {
         file_name: file_name,
-        line_start: raw_span.line_start,
-        column_start: raw_span.column_start,
-        line_end: raw_span.line_end,
-        column_end: raw_span.column_end,
+        line_start: raw_span.line_start - 1,
+        column_start: raw_span.column_start - 1,
+        line_end: raw_span.line_end - 1,
+        column_end: raw_span.column_end - 1,
     }
 }
 
