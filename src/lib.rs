@@ -29,7 +29,7 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::SystemTime;
-// use syntax::codemap::Loc;
+use syntax::codemap::Loc;
 
 pub struct AnalysisHost {
     analysis: Mutex<Option<Analysis>>,
@@ -143,6 +143,10 @@ impl AnalysisHost {
         })
     }
 
+    pub fn id(&self, span: &Span) -> AResult<u32> {
+        self.read(|a| a.def_id_for_span(span))
+    }
+
     pub fn find_all_refs(&self, span: &Span) -> AResult<Vec<Span>> {
         self.read(|a| {
             a.def_id_for_span(span)
@@ -172,6 +176,8 @@ impl AnalysisHost {
          })
     }
 
+    /// Search for a symbol name, returns a list of spans matching defs and refs
+    /// for that name.
     pub fn search(&self, name: &str) -> AResult<Vec<Span>> {
         self.read(|a| {
             a.with_def_names(name, |defs| {
@@ -182,6 +188,25 @@ impl AnalysisHost {
                      .collect(): Vec<Span>
              })
         })
+    }
+
+    // TODO refactor search and find_all_refs to use this
+    // Includes all references and the def, the def is always first.
+    pub fn find_all_refs_by_id(&self, id: u32) -> AResult<Vec<Span>> {
+        self.read(|a| {
+            a.with_ref_spans(id, |refs| {
+                a.with_defs(id, clone_field!(span))
+                 .into_iter()
+                 .chain(refs.iter().cloned())
+                 .collect::<Vec<_>>()
+             })
+             .or(a.with_defs(id, clone_field!(span)).map(|s| vec![s]))
+        })
+    }
+
+    /// Search for a symbol name, returning a list of def_ids for that name.
+    pub fn search_for_id(&self, name: &str) -> AResult<Vec<u32>> {
+        self.read(|a| a.with_def_names(name, |defs| defs.clone()))
     }
 
     pub fn symbols(&self, file_name: &str) -> AResult<Vec<SymbolResult>> {
@@ -394,62 +419,19 @@ impl Analysis {
     {
         self.for_each_crate(|c| c.def_names.get(name).map(&f))
     }
-
-    // TODO resurect these methods
-    // pub fn lookup_def_ids(&self, name: &str) -> Option<&Vec<u32>> {
-    //     self.def_names.get(name)
-    // }
-
-    // fn lookup_def(&self, id: u32) -> &Def {
-    //     &self.defs[&id]
-    // }
-
-    // pub fn lookup_def_span(&self, id: u32) -> Span {
-    //     self.defs[&id].span.clone()
-    // }
-
-    // pub fn lookup_refs(&self, id: u32) -> &[Span] {
-    //     &self.ref_spans[&id]
-    // }
-
-    // pub fn get_spans(&self, id: u32) -> Vec<Span> {
-    //     let mut result = self.lookup_refs(id).to_owned();
-    //     // TODO what if lookup_def panics
-    //     result.push(self.lookup_def(id).span.clone());
-    //     result
-    // }
-
-    // pub fn get_title(&self, lo: &Loc, hi: &Loc) -> Option<&str> {
-    //     let span = Span::from_locs(lo, hi);
-    //     self.def_id_for_span.get(&span).and_then(|id| self.defs.get(id).map(|def| &*def.value))
-    // }
-
-    // pub fn get_class_id(&self, lo: &Loc, hi: &Loc) -> Option<u32> {
-    //     let span = Span::from_locs(lo, hi);
-    //     self.def_id_for_span.get(&span).map(|i| *i)
-    // }
-
-    // // Basically goto def
-    // pub fn get_link(&self, lo: &Loc, hi: &Loc) -> Option<String> {
-    //     let span = Span::from_locs(lo, hi);
-    //     self.def_id_for_span.get(&span).and_then(|id| self.defs.get(id)).map(|def| {
-    //         let s = &def.span;
-    //         format!("{}:{}:{}:{}:{}", s.file_name, s.line_start, s.column_start, s.line_end, s.column_end)
-    //     })
-    // }
 }
 
-// impl Span {
-//     fn from_locs(lo: &Loc, hi: &Loc) -> Span {
-//         Span {
-//             file_name: lo.file.name.clone(),
-//             line_start: lo.line as usize,
-//             column_start: lo.col.0 as usize + 1,
-//             line_end: hi.line as usize,
-//             column_end: hi.col.0 as usize + 1,
-//         }
-//     }
-// }
+impl Span {
+    pub fn from_locs(lo: &Loc, hi: &Loc, project_dir: &str) -> Span {
+        Span {
+            file_name: format!("{}/{}/{}", env::current_dir().unwrap().display(), project_dir, lo.file.name),
+            line_start: lo.line as usize - 1,
+            column_start: lo.col.0 as usize,
+            line_end: hi.line as usize - 1,
+            column_end: hi.col.0 as usize,
+        }
+    }
+}
 
 // Used to indicate a missing index in the Id.
 const NULL: u32 = u32::max_value();
