@@ -110,6 +110,7 @@ impl CrateReader {
                 name: i.name,
                 value: i.value,
                 qualname: String::new(),
+                api_crate: false,
                 parent: None,
                 docs: String::new(),
             };
@@ -141,6 +142,7 @@ impl CrateReader {
                     name: d.name,
                     value: d.value,
                     qualname: format!("{}{}", self.crate_name, d.qualname),
+                    api_crate: api_crate,
                     parent: d.parent.map(|id| self.id_from_compiler_id(&id)),
                     docs: if let Some(index) = d.docs.find("\n\n") {
                         d.docs[..index].to_owned()
@@ -160,7 +162,7 @@ impl CrateReader {
             let span = lower_span(&r.span, Some(&self.project_dir));
             if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) &&
                (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id)) {
-                //println!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, id);
+                //println!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, def_id);
                 analysis.def_id_for_span.insert(span.clone(), def_id);
                 analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
             }

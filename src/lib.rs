@@ -26,7 +26,7 @@ mod listings;
 pub use self::raw::Target;
 use std::collections::HashMap;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
 use syntax::codemap::Loc;
@@ -229,13 +229,16 @@ impl AnalysisHost {
 
     pub fn src_url(&self, span: &Span) -> AResult<String> {
         // e.g., https://github.com/rust-lang/rust/blob/master/src/libcollections/string.rs#L261-L263
+
+        // FIXME would be nice not to do this every time.
+        let path_prefix = &{
+            let p = self.path_prefix.lock().unwrap();
+            p.as_ref().map(|ref s| Path::new(s).canonicalize().unwrap().to_owned())
+        };
+
         self.read(|a| {
             a.def_id_for_span(span)
-             .and_then(|id| a.with_defs(id, |def| format!("{}/{}#L{}-L{}",
-                                                          a.src_url_base,
-                                                          def.span.file_name,
-                                                          def.span.line_start,
-                                                          def.span.line_end)))
+             .and_then(|id| a.with_defs_and_then(id, |def| AnalysisHost::mk_src_url(def, path_prefix.as_ref(), a)))
         })
     }
 
@@ -255,12 +258,14 @@ impl AnalysisHost {
     }
 
     fn mk_doc_url(def: &Def, analysis: &Analysis) -> Option<String> {
+        if !def.api_crate {
+            return None;
+        }
+
         if def.parent.is_none() && def.qualname.contains('<') {
             println!("mk_doc_url, bailing, found generic qualname: `{}`", def.qualname);
             return None;
         }
-
-        // TODO bail out if not stdlibs
 
         match def.parent {
             Some(p) => {
@@ -275,6 +280,29 @@ impl AnalysisHost {
                 let ns = def.kind.name_space();
                 Some(format!("{}/{}.{}.html", analysis.doc_url_base, qualpath, ns))
             }
+        }
+    }
+
+    fn mk_src_url(def: &Def, path_prefix: Option<&PathBuf>, analysis: &Analysis) -> Option<String> {
+        let path_prefix = match path_prefix {
+            Some(pp) => pp,
+            None => return None,
+        };
+        let file_name = &def.span.file_name;
+        let file_path = &Path::new(file_name);
+        let file_path = match file_path.strip_prefix(&path_prefix) {
+            Ok(p) => p,
+            Err(_) => return None,
+        };
+
+        if def.api_crate {
+            Some(format!("{}/{}#L{}-L{}",
+                         analysis.src_url_base,
+                         file_path.to_str().unwrap(),
+                         def.span.line_start + 1,
+                         def.span.line_end + 1))
+        } else {
+            None
         }
     }
 }
@@ -334,6 +362,7 @@ pub struct Def {
     pub span: Span,
     pub name: String,
     pub qualname: String,
+    pub api_crate: bool,
     pub parent: Option<u32>,
     pub value: String,
     pub docs: String,
