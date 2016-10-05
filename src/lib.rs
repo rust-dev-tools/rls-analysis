@@ -10,14 +10,12 @@
 #![feature(const_fn)]
 #![feature(custom_derive, plugin)]
 #![feature(type_ascription)]
-#![feature(rustc_private)]
 
 #![plugin(serde_macros)]
 
 extern crate rustc_serialize;
 extern crate serde;
 extern crate serde_json;
-extern crate syntax;
 
 pub mod raw;
 mod lowering;
@@ -25,11 +23,9 @@ mod listings;
 
 pub use self::raw::Target;
 use std::collections::HashMap;
-use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
-use syntax::codemap::Loc;
 
 pub struct AnalysisHost {
     analysis: Mutex<Option<Analysis>>,
@@ -443,18 +439,6 @@ impl Analysis {
         where F: Fn(&Vec<u32>) -> T
     {
         self.for_each_crate(|c| c.def_names.get(name).map(&f))
-    }
-}
-
-impl Span {
-    pub fn from_locs(lo: &Loc, hi: &Loc, project_dir: &str) -> Span {
-        Span {
-            file_name: format!("{}/{}/{}", env::current_dir().unwrap().display(), project_dir, lo.file.name),
-            line_start: lo.line as usize - 1,
-            column_start: lo.col.0 as usize,
-            line_end: hi.line as usize - 1,
-            column_end: hi.col.0 as usize,
-        }
     }
 }
 
