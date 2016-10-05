@@ -80,7 +80,7 @@ impl AnalysisHost {
 
         let raw_analysis = raw::Analysis::read_incremental(path_prefix, self.target, timestamps);
 
-        lowering::lower(raw_analysis, Self::mk_project_dir(path_prefix), self, |host, per_crate, path| {
+        lowering::lower(raw_analysis, path_prefix.to_owned(), self, |host, per_crate, path| {
             match host.analysis.lock() {
                 Ok(mut a) => {
                     a.as_mut().unwrap().update(per_crate, path);
@@ -99,7 +99,7 @@ impl AnalysisHost {
         // then once we're done, we'll swap its data into self.
         let mut new_host = AnalysisHost::new(self.target);
         new_host.analysis = Mutex::new(Some(Analysis::new()));
-        lowering::lower(raw_analysis, Self::mk_project_dir(path_prefix), &mut new_host, |host, per_crate, path| {
+        lowering::lower(raw_analysis, path_prefix.to_owned(), &mut new_host, |host, per_crate, path| {
             host.analysis.lock().unwrap().as_mut().unwrap().per_crate.insert(path, per_crate);
             Ok(())
         })?;
@@ -123,10 +123,6 @@ impl AnalysisHost {
             }
             Err(_) => Err(()),
         }
-    }
-
-    fn mk_project_dir(path_prefix: &str) -> String {
-        format!("{}/{}", env::current_dir().unwrap().display(), path_prefix)
     }
 
     pub fn has_def(&self, id: u32) -> bool {

@@ -136,6 +136,7 @@ impl CrateReader {
                     analysis.def_id_for_span.insert(span.clone(), id);
                     analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
                 }
+                //println!("record def {}: {:?}", d.name, span);
                 let def = Def {
                     kind: d.kind,
                     span: span,
