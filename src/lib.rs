@@ -8,14 +8,14 @@
 
 #![feature(question_mark)]
 #![feature(const_fn)]
-#![feature(custom_derive, plugin)]
 #![feature(type_ascription)]
-
-#![plugin(serde_macros)]
+#![feature(rustc_macro)]
 
 extern crate rustc_serialize;
 extern crate serde;
 extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 
 pub mod raw;
 mod lowering;
