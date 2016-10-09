@@ -106,7 +106,6 @@ impl Analysis {
             }
 
             let d = t.elapsed();
-            println!("reading {} crates from {} in {}.{:09}s", result.len(), p.display(), d.as_secs(), d.subsec_nanos());
 
             return result;
         })
@@ -124,7 +123,6 @@ impl Analysis {
         match serde_json::from_str(&buf) {
             Ok(a) => Some(a),
             Err(e) => {
-                println!("Error reading raw analysis: {}", e);
                 None
             }
         }
@@ -239,7 +237,6 @@ impl Deserialize for DefKind {
             "Const" => Ok(DefKind::Const),
             "Field" => Ok(DefKind::Field),
             _ => {
-                println!("{:?}", s);
                 Err(serde::de::Error::custom("unexpected def kind"))
             }
         }
