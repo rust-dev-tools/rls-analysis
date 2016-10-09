@@ -105,7 +105,8 @@ impl Analysis {
                 }
             }
 
-            let d = t.elapsed();
+            let _d = t.elapsed();
+            // println!("reading {} crates from {} in {}.{:09}s", result.len(), p.display(), _d.as_secs(), _d.subsec_nanos());
 
             return result;
         })
@@ -120,12 +121,7 @@ impl Analysis {
         let mut file = File::open(&path).unwrap();
         let mut buf = String::new();
         file.read_to_string(&mut buf).unwrap();
-        match serde_json::from_str(&buf) {
-            Ok(a) => Some(a),
-            Err(e) => {
-                None
-            }
-        }
+        serde_json::from_str(&buf).ok()
     }
 
     fn iter_paths<F, T>(path_prefix: &str, target: Target, f: F) -> Vec<T>
