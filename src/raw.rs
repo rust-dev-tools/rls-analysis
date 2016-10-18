@@ -129,8 +129,8 @@ impl Analysis {
     {
         // TODO shouldn't hard-code these paths, it's cargo-specific
         // TODO deps path allows to break out of 'sandbox' - is that Ok?
-        let principle_path = format!("{}/target/{}/save-analysis", path_prefix, target);
-        let deps_path = format!("{}/target/{}/deps/save-analysis", path_prefix, target);
+        let principle_path = format!("{}/target/rls/{}/save-analysis", path_prefix, target);
+        let deps_path = format!("{}/target/rls/{}/deps/save-analysis", path_prefix, target);
         let libs_path = format!("{}/libs/save-analysis", path_prefix);
         let paths = &[&Path::new(&libs_path),
                       &Path::new(&deps_path),
