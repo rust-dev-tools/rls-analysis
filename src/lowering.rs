@@ -12,9 +12,9 @@ use super::raw::{self, Format};
 use super::{AnalysisHost, PerCrateAnalysis, Span, NULL, Def};
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: String, analysis: &AnalysisHost, mut f: F) -> Result<(), ()>
+pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, analysis: &AnalysisHost, mut f: F) -> Result<(), ()>
     where F: FnMut(&AnalysisHost, PerCrateAnalysis, PathBuf) -> Result<(), ()>
 {
     for c in raw_analysis.into_iter() {
@@ -25,12 +25,12 @@ pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: String, analysis: &A
     Ok(())
 }
 
-pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&str>) -> Span {
+pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&Path>) -> Span {
     let file_name = &raw_span.file_name;
-    let file_name = if file_name.starts_with('/') {
-        file_name.clone()
+    let file_name = if file_name.is_absolute() {
+        file_name.to_owned()
     } else {
-        format!("{}/{}", project_dir.expect("Required project directory, but not supplied"), file_name)
+        project_dir.expect("Required project directory, but not supplied").join(file_name)
     };
 
 
@@ -46,14 +46,14 @@ pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&str>) -> Span {
 
 struct CrateReader {
     crate_map: Vec<u32>,
-    project_dir: String,
+    project_dir: PathBuf,
     crate_name: String,
 }
 
 impl CrateReader {
     fn from_prelude(mut prelude: raw::CratePreludeData,
                     master_crate_map: &mut HashMap<String, u32>,
-                    project_dir: &str)
+                    project_dir: &Path)
                     -> CrateReader {
         let crate_name = prelude.crate_name.clone();
         // println!("building crate map for {}", crate_name);
@@ -78,7 +78,7 @@ impl CrateReader {
 
     fn read_crate(project_analysis: &AnalysisHost,
                   krate: raw::Crate,
-                  project_dir: &str)
+                  project_dir: &Path)
                   -> (PerCrateAnalysis, PathBuf) {
         let reader = CrateReader::from_prelude(krate.analysis.prelude.unwrap(),
                                                &mut project_analysis.master_crate_map.lock().unwrap(),
