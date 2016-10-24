@@ -13,6 +13,7 @@ use serde::Deserialize;
 use serde_json;
 
 use std::collections::HashMap;
+use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -53,6 +54,15 @@ impl Crate {
             analysis: analysis,
             timestamp: timestamp,
             path: path
+        }
+    }
+}
+
+impl fmt::Display for Target {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Target::Release => write!(f, "release"),
+            Target::Debug => write!(f, "debug"),
         }
     }
 }
@@ -117,15 +127,12 @@ impl Analysis {
     fn iter_paths<F, T>(path_prefix: &Path, target: Target, f: F) -> Vec<T>
         where F: Fn(&Path) -> Vec<T>
     {
-        let target = match target {
-            Target::Release => "release",
-            Target::Debug => "debug",
-        };
+        let target = target.to_string();
 
         // TODO shouldn't hard-code these paths, it's cargo-specific
         // TODO deps path allows to break out of 'sandbox' - is that Ok?
-        let principle_path = path_prefix.join("target").join("rls").join(target).join("save-analysis");
-        let deps_path = path_prefix.join("target").join("rls").join(target).join("deps").join("save-analysis");
+        let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
+        let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
         let libs_path = path_prefix.join("libs").join("save-analysis");
         let paths = &[&libs_path,
                       &deps_path,
