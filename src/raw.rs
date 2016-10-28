@@ -68,7 +68,7 @@ impl fmt::Display for Target {
 }
 
 impl Analysis {
-    pub fn read_incremental(path_prefix: &str,
+    pub fn read_incremental(path_prefix: &Path,
                             target: Target,
                             timestamps: HashMap<PathBuf, Option<SystemTime>>)
                             -> Vec<Crate> {
@@ -112,7 +112,7 @@ impl Analysis {
         })
     }
 
-    pub fn read(path_prefix: &str, target: Target) -> Vec<Crate> {
+    pub fn read(path_prefix: &Path, target: Target) -> Vec<Crate> {
         Self::read_incremental(path_prefix, target, HashMap::new())
     }
 
@@ -124,17 +124,19 @@ impl Analysis {
         serde_json::from_str(&buf).ok()
     }
 
-    fn iter_paths<F, T>(path_prefix: &str, target: Target, f: F) -> Vec<T>
+    fn iter_paths<F, T>(path_prefix: &Path, target: Target, f: F) -> Vec<T>
         where F: Fn(&Path) -> Vec<T>
     {
+        let target = target.to_string();
+
         // TODO shouldn't hard-code these paths, it's cargo-specific
         // TODO deps path allows to break out of 'sandbox' - is that Ok?
-        let principle_path = format!("{}/target/rls/{}/save-analysis", path_prefix, target);
-        let deps_path = format!("{}/target/rls/{}/deps/save-analysis", path_prefix, target);
-        let libs_path = format!("{}/libs/save-analysis", path_prefix);
-        let paths = &[&Path::new(&libs_path),
-                      &Path::new(&deps_path),
-                      &Path::new(&principle_path)];
+        let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
+        let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
+        let libs_path = path_prefix.join("libs").join("save-analysis");
+        let paths = &[&libs_path,
+                      &deps_path,
+                      &principle_path];
 
         paths.iter().flat_map(|p| f(p).into_iter()).collect()
     }
@@ -310,7 +312,7 @@ impl Deserialize for ImportKind {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct SpanData {
-    pub file_name: String,
+    pub file_name: PathBuf,
     pub byte_start: u32,
     pub byte_end: u32,
     /// 1-based.

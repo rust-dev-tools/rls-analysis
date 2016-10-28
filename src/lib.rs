@@ -28,7 +28,7 @@ use std::time::SystemTime;
 
 pub struct AnalysisHost {
     analysis: Mutex<Option<Analysis>>,
-    path_prefix: Mutex<Option<String>>,
+    path_prefix: Mutex<Option<PathBuf>>,
     target: Target,
     master_crate_map: Mutex<HashMap<String, u32>>,
 }
@@ -49,7 +49,7 @@ impl AnalysisHost {
         }
     }
 
-    pub fn reload(&self, path_prefix: &str) -> AResult<()> {
+    pub fn reload(&self, path_prefix: &Path) -> AResult<()> {
         let mut needs_hard_reload = false;
         match self.path_prefix.lock() {
             Ok(pp) => {
@@ -87,7 +87,7 @@ impl AnalysisHost {
     }
 
     // Reloads the entire project's analysis data.
-    pub fn hard_reload(&self, path_prefix: &str) -> AResult<()> {
+    pub fn hard_reload(&self, path_prefix: &Path) -> AResult<()> {
         let raw_analysis = raw::Analysis::read(path_prefix, self.target);
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
@@ -200,7 +200,7 @@ impl AnalysisHost {
         self.read(|a| a.with_def_names(name, |defs| defs.clone()))
     }
 
-    pub fn symbols(&self, file_name: &str) -> AResult<Vec<SymbolResult>> {
+    pub fn symbols(&self, file_name: &Path) -> AResult<Vec<SymbolResult>> {
         self.read(|a| {
             a.with_defs_per_file(file_name, |ids| {
                 ids.iter()
@@ -330,7 +330,7 @@ pub struct PerCrateAnalysis {
     // Map span to id of def (either because it is the span of the def, or of the def for the ref).
     def_id_for_span: HashMap<Span, u32>,
     defs: HashMap<u32, Def>,
-    defs_per_file: HashMap<String, Vec<u32>>,
+    defs_per_file: HashMap<PathBuf, Vec<u32>>,
     def_names: HashMap<String, Vec<u32>>,
     ref_spans: HashMap<u32, Vec<Span>>,
     globs: HashMap<Span, Glob>,
@@ -341,7 +341,7 @@ pub struct PerCrateAnalysis {
 #[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Span {
     // Note the ordering of fields for the Ord impl.
-    pub file_name: String,
+    pub file_name: PathBuf,
     pub line_start: usize,
     pub column_start: usize,
     pub line_end: usize,
@@ -435,7 +435,7 @@ impl Analysis {
         self.for_each_crate(|c| c.ref_spans.get(&id).map(&f))
     }
 
-    fn with_defs_per_file<F, T>(&self, file: &str, f: F) -> Option<T>
+    fn with_defs_per_file<F, T>(&self, file: &Path, f: F) -> Option<T>
         where F: Fn(&Vec<u32>) -> T
     {
         self.for_each_crate(|c| c.defs_per_file.get(file).map(&f))
