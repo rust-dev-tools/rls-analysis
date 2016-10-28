@@ -280,7 +280,7 @@ pub struct MacroRef {
 #[derive(Deserialize, Debug)]
 pub struct Import {
     pub kind: ImportKind,
-    pub id: CompilerId,
+    pub ref_id: Option<CompilerId>,
     pub span: SpanData,
     pub name: String,
     pub value: String,

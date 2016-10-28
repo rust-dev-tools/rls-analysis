@@ -333,6 +333,7 @@ pub struct PerCrateAnalysis {
     defs_per_file: HashMap<String, Vec<u32>>,
     def_names: HashMap<String, Vec<u32>>,
     ref_spans: HashMap<u32, Vec<Span>>,
+    globs: HashMap<Span, Glob>,
 
     timestamp: Option<SystemTime>,
 }
@@ -359,6 +360,11 @@ pub struct Def {
     pub docs: String,
 }
 
+#[derive(Debug)]
+pub struct Glob {
+    pub value: String,
+}
+
 impl PerCrateAnalysis {
     pub fn new() -> PerCrateAnalysis {
         PerCrateAnalysis {
@@ -367,6 +373,7 @@ impl PerCrateAnalysis {
             defs_per_file: HashMap::new(),
             def_names: HashMap::new(),
             ref_spans: HashMap::new(),
+            globs: HashMap::new(),
             timestamp: None,
         }
     }    

@@ -9,7 +9,7 @@
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
 use super::raw::{self, Format};
-use super::{AnalysisHost, PerCrateAnalysis, Span, NULL, Def};
+use super::{AnalysisHost, PerCrateAnalysis, Span, NULL, Def, Glob};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -91,30 +91,32 @@ impl CrateReader {
             per_crate.timestamp = Some(krate.timestamp);
         }
 
-        reader.read_imports(krate.analysis.imports, &mut per_crate);
         reader.read_defs(krate.analysis.defs, &mut per_crate, api_crate);
+        reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
 
         (per_crate, krate.path)
     }
 
-    fn read_imports(&self, imports: Vec<raw::Import>, analysis: &mut PerCrateAnalysis) {
+    fn read_imports(&self, imports: Vec<raw::Import>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost) {
         for i in imports {
             let span = lower_span(&i.span, Some(&self.project_dir));
-            let id = self.id_from_compiler_id(&i.id);
-            analysis.def_id_for_span.insert(span.clone(), id);
-
-            let def = Def {
-                kind: raw::DefKind::Import,
-                span: span,
-                name: i.name,
-                value: i.value,
-                qualname: String::new(),
-                api_crate: false,
-                parent: None,
-                docs: String::new(),
-            };
-            analysis.defs.insert(id, def);
+            if !i.value.is_empty() {
+                // A glob import.
+                let glob = Glob {
+                    value: i.value,
+                };
+                analysis.globs.insert(span, glob);
+            } else if let Some(ref ref_id) = i.ref_id {
+                // Import where we know the referred def.
+                let def_id = self.id_from_compiler_id(ref_id);
+                if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) &&
+                   (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id)) {
+                    //println!("record import ref {:?} {:?} {:?} {}", i, span, ref_id, def_id);
+                    analysis.def_id_for_span.insert(span.clone(), def_id);
+                    analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
+                }
+            }
         }
     }
 
