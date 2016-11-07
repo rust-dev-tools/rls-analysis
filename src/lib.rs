@@ -138,19 +138,26 @@ impl AnalysisHost {
         self.read(|a| a.def_id_for_span(span))
     }
 
-    pub fn find_all_refs(&self, span: &Span) -> AResult<Vec<Span>> {
-        self.read(|a| {
-            a.def_id_for_span(span)
-             .and_then(|id| {
-                a.with_ref_spans(id, |refs| {
-                    a.with_defs(id, clone_field!(span))
-                     .into_iter()
-                     .chain(refs.iter().cloned())
-                     .collect::<Vec<_>>()
+    pub fn find_all_refs(&self, span: &Span, include_decl: bool) -> AResult<Vec<Span>> {
+        if include_decl {
+            self.read(|a| {
+                a.def_id_for_span(span)
+                 .and_then(|id| {
+                    a.with_ref_spans(id, |refs| {
+                        a.with_defs(id, clone_field!(span))
+                         .into_iter()
+                         .chain(refs.iter().cloned())
+                         .collect::<Vec<_>>()
+                     })
+                     .or(a.with_defs(id, clone_field!(span)).map(|s| vec![s]))
                  })
-                 .or(a.with_defs(id, clone_field!(span)).map(|s| vec![s]))
-             })
-        })
+            })
+        } else {
+            self.read(|a| {
+                a.def_id_for_span(span)
+                 .map(|id| a.with_ref_spans(id, |refs| refs.clone()).unwrap_or(vec![]))
+            })
+        }
     }
 
     pub fn show_type(&self, span: &Span) -> AResult<String> {
