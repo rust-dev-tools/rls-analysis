@@ -39,6 +39,18 @@ macro_rules! clone_field {
     ($field: ident) => { |x| x.$field.clone() }
 }
 
+macro_rules! def_span {
+    ($analysis: expr, $id: expr) => {
+        $analysis.with_defs_and_then($id, |def| {
+            if def.api_crate {
+                None
+            } else {
+                Some(def.span.clone())
+            }
+        })
+    }
+}
+
 impl AnalysisHost {
     pub fn new(target: Target) -> AnalysisHost {
         AnalysisHost {
@@ -120,6 +132,8 @@ impl AnalysisHost {
         }
     }
 
+    /// Note that self.has_def == true =/> self.goto_def.is_some(), since if the
+    /// def is in an api crate, there is no reasonable span to jump to.
     pub fn has_def(&self, id: u32) -> bool {
         match self.analysis.lock() {
             Ok(a) => a.as_ref().unwrap().has_def(id),
@@ -130,7 +144,7 @@ impl AnalysisHost {
     pub fn goto_def(&self, span: &Span) -> AResult<Span> {
         self.read(|a| {
             a.def_id_for_span(span)
-             .and_then(|id| a.with_defs(id, clone_field!(span)))
+             .and_then(|id| def_span!(a, id))
         })
     }
 
@@ -144,12 +158,12 @@ impl AnalysisHost {
                 a.def_id_for_span(span)
                  .and_then(|id| {
                     a.with_ref_spans(id, |refs| {
-                        a.with_defs(id, clone_field!(span))
+                        def_span!(a, id)
                          .into_iter()
                          .chain(refs.iter().cloned())
                          .collect::<Vec<_>>()
                      })
-                     .or(a.with_defs(id, clone_field!(span)).map(|s| vec![s]))
+                     .or(def_span!(a, id).map(|s| vec![s]))
                  })
             })
         } else {
@@ -193,12 +207,12 @@ impl AnalysisHost {
     pub fn find_all_refs_by_id(&self, id: u32) -> AResult<Vec<Span>> {
         self.read(|a| {
             a.with_ref_spans(id, |refs| {
-                a.with_defs(id, clone_field!(span))
+                def_span!(a, id)
                  .into_iter()
                  .chain(refs.iter().cloned())
                  .collect::<Vec<_>>()
              })
-             .or(a.with_defs(id, clone_field!(span)).map(|s| vec![s]))
+             .or(def_span!(a, id).map(|s| vec![s]))
         })
     }
 
