@@ -26,7 +26,7 @@ pub use self::raw::Target;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 pub struct AnalysisHost {
     analysis: Mutex<Option<Analysis>>,
@@ -155,7 +155,8 @@ impl AnalysisHost {
     }
 
     pub fn find_all_refs(&self, span: &Span, include_decl: bool) -> AResult<Vec<Span>> {
-        if include_decl {
+        let t_start = Instant::now();
+        let result = if include_decl {
             self.read(|a| {
                 a.def_id_for_span(span)
                  .and_then(|id| {
@@ -173,7 +174,11 @@ impl AnalysisHost {
                 a.def_id_for_span(span)
                  .map(|id| a.with_ref_spans(id, |refs| refs.clone()).unwrap_or(vec![]))
             })
-        }
+        };
+
+        let time = t_start.elapsed();
+        info!("find_all_refs: {}s", time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
+        result
     }
 
     pub fn show_type(&self, span: &Span) -> AResult<String> {
@@ -193,7 +198,8 @@ impl AnalysisHost {
     /// Search for a symbol name, returns a list of spans matching defs and refs
     /// for that name.
     pub fn search(&self, name: &str) -> AResult<Vec<Span>> {
-        self.read(|a| {
+        let t_start = Instant::now();
+        let result = self.read(|a| {
             a.with_def_names(name, |defs| {
                 defs.into_iter()
                      .flat_map(|id| {
@@ -201,13 +207,18 @@ impl AnalysisHost {
                      })
                      .collect(): Vec<Span>
              })
-        })
+        });
+
+        let time = t_start.elapsed();
+        info!("search: {}s", time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
+        result
     }
 
     // TODO refactor search and find_all_refs to use this
     // Includes all references and the def, the def is always first.
     pub fn find_all_refs_by_id(&self, id: u32) -> AResult<Vec<Span>> {
-        self.read(|a| {
+        let t_start = Instant::now();
+        let result = self.read(|a| {
             a.with_ref_spans(id, |refs| {
                 def_span!(a, id)
                  .into_iter()
@@ -215,7 +226,11 @@ impl AnalysisHost {
                  .collect::<Vec<_>>()
              })
              .or(def_span!(a, id).map(|s| vec![s]))
-        })
+        });
+
+        let time = t_start.elapsed();
+        info!("find_all_refs_by_id: {}s", time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
+        result
     }
 
     /// Search for a symbol name, returning a list of def_ids for that name.
@@ -277,7 +292,7 @@ impl AnalysisHost {
         }
 
         if def.parent.is_none() && def.qualname.contains('<') {
-            println!("mk_doc_url, bailing, found generic qualname: `{}`", def.qualname);
+            debug!("mk_doc_url, bailing, found generic qualname: `{}`", def.qualname);
             return None;
         }
 

@@ -13,14 +13,26 @@ use super::{AnalysisHost, PerCrateAnalysis, Span, NULL, Def, Glob};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
+// f is a function used to record the lowered crate into analysis.
 pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, analysis: &AnalysisHost, mut f: F) -> Result<(), ()>
     where F: FnMut(&AnalysisHost, PerCrateAnalysis, PathBuf) -> Result<(), ()>
 {
+    let t_start = Instant::now();
     for c in raw_analysis.into_iter() {
+        let t_start = Instant::now();
+
         let (per_crate, path) = CrateReader::read_crate(analysis, c, &project_dir);
+
+        let time = t_start.elapsed();
+        info!("Lowering {} in {}s", path.display(), time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
+
         f(analysis, per_crate, path)?;
     }
+
+    let time = t_start.elapsed();
+    info!("Total lowering time: {}s", time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
 
     Ok(())
 }
