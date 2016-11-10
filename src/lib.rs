@@ -21,6 +21,7 @@ extern crate log;
 pub mod raw;
 mod lowering;
 mod listings;
+mod util;
 
 pub use self::raw::Target;
 use std::collections::HashMap;
