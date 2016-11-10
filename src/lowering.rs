@@ -20,15 +20,16 @@ use std::time::Instant;
 pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, analysis: &AnalysisHost, mut f: F) -> Result<(), ()>
     where F: FnMut(&AnalysisHost, PerCrateAnalysis, PathBuf) -> Result<(), ()>
 {
-    info!("RSS before lowering: {}", util::get_resident().unwrap_or(0));
+    let rss = util::get_resident().unwrap_or(0);
     let t_start = Instant::now();
+
     for c in raw_analysis.into_iter() {
         let t_start = Instant::now();
 
         let (per_crate, path) = CrateReader::read_crate(analysis, c, &project_dir);
 
         let time = t_start.elapsed();
-        info!("Lowering {} in {}s", path.display(), time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
+        info!("Lowering {} in {:.2}s", path.display(), time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
         info!("    defs:  {}", per_crate.defs.len());
         info!("    refs:  {}", per_crate.ref_spans.len());
         info!("    globs: {}", per_crate.globs.len());
@@ -37,8 +38,9 @@ pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, analysis: &
     }
 
     let time = t_start.elapsed();
-    info!("Total lowering time: {}s", time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
-    info!("RSS after lowering: {}", util::get_resident().unwrap_or(0));
+    let rss = util::get_resident().unwrap_or(0) - rss;
+    info!("Total lowering time: {:.2}s", time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
+    info!("Diff in rss: {:.2}KB", rss as f64 / 1000.0);
 
     Ok(())
 }
