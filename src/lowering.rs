@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 // f is a function used to record the lowered crate into analysis.
-pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, analysis: &AnalysisHost, mut f: F) -> Result<(), ()>
+pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_docs: bool, analysis: &AnalysisHost, mut f: F) -> Result<(), ()>
     where F: FnMut(&AnalysisHost, PerCrateAnalysis, PathBuf) -> Result<(), ()>
 {
     let rss = util::get_resident().unwrap_or(0);
@@ -26,7 +26,7 @@ pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, analysis: &
     for c in raw_analysis.into_iter() {
         let t_start = Instant::now();
 
-        let (per_crate, path) = CrateReader::read_crate(analysis, c, &project_dir);
+        let (per_crate, path) = CrateReader::read_crate(analysis, c, &project_dir, full_docs);
 
         let time = t_start.elapsed();
         info!("Lowering {} in {:.2}s", path.display(), time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
@@ -68,12 +68,14 @@ struct CrateReader {
     crate_map: Vec<u32>,
     project_dir: PathBuf,
     crate_name: String,
+    full_docs: bool,
 }
 
 impl CrateReader {
     fn from_prelude(mut prelude: raw::CratePreludeData,
                     master_crate_map: &mut HashMap<String, u32>,
-                    project_dir: &Path)
+                    project_dir: &Path,
+                    full_docs: bool)
                     -> CrateReader {
         let crate_name = prelude.crate_name.clone();
         // println!("building crate map for {}", crate_name);
@@ -93,16 +95,19 @@ impl CrateReader {
             crate_map: crate_map,
             project_dir: project_dir.to_owned(),
             crate_name: crate_name,
+            full_docs: full_docs,
         }
     }
 
     fn read_crate(project_analysis: &AnalysisHost,
                   krate: raw::Crate,
-                  project_dir: &Path)
+                  project_dir: &Path,
+                  full_docs: bool)
                   -> (PerCrateAnalysis, PathBuf) {
         let reader = CrateReader::from_prelude(krate.analysis.prelude.unwrap(),
                                                &mut project_analysis.master_crate_map.lock().unwrap(),
-                                               project_dir);
+                                               project_dir,
+                                               full_docs);
 
         let mut per_crate = PerCrateAnalysis::new();
 
@@ -167,10 +172,9 @@ impl CrateReader {
                     qualname: format!("{}{}", self.crate_name, d.qualname),
                     api_crate: api_crate,
                     parent: d.parent.map(|id| self.id_from_compiler_id(&id)),
-                    docs: if let Some(index) = d.docs.find("\n\n") {
-                        d.docs[..index].to_owned()
-                    } else {
-                        d.docs
+                    docs: match d.docs.find("\n\n") {
+                        Some(index) if !self.full_docs => d.docs[..index].to_owned(),
+                        _ => d.docs,
                     },
                 };
 

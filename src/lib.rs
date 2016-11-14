@@ -64,7 +64,7 @@ impl AnalysisHost {
         }
     }
 
-    pub fn reload(&self, path_prefix: &Path) -> AResult<()> {
+    pub fn reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
         let mut needs_hard_reload = false;
         match self.path_prefix.lock() {
             Ok(pp) => {
@@ -85,12 +85,12 @@ impl AnalysisHost {
         };
 
         if needs_hard_reload {
-            return self.hard_reload(path_prefix);
+            return self.hard_reload(path_prefix, full_docs);
         }
 
         let raw_analysis = raw::Analysis::read_incremental(path_prefix, self.target, timestamps);
 
-        lowering::lower(raw_analysis, path_prefix.to_owned(), self, |host, per_crate, path| {
+        lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, self, |host, per_crate, path| {
             match host.analysis.lock() {
                 Ok(mut a) => {
                     a.as_mut().unwrap().update(per_crate, path);
@@ -102,14 +102,14 @@ impl AnalysisHost {
     }
 
     // Reloads the entire project's analysis data.
-    pub fn hard_reload(&self, path_prefix: &Path) -> AResult<()> {
+    pub fn hard_reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
         let raw_analysis = raw::Analysis::read(path_prefix, self.target);
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.
         let mut new_host = AnalysisHost::new(self.target);
         new_host.analysis = Mutex::new(Some(Analysis::new()));
-        lowering::lower(raw_analysis, path_prefix.to_owned(), &mut new_host, |host, per_crate, path| {
+        lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, &mut new_host, |host, per_crate, path| {
             host.analysis.lock().unwrap().as_mut().unwrap().per_crate.insert(path, per_crate);
             Ok(())
         })?;
@@ -148,6 +148,28 @@ impl AnalysisHost {
         self.read(|a| {
             a.def_id_for_span(span)
              .and_then(|id| def_span!(a, id))
+        })
+    }
+
+    pub fn get_def(&self, id: u32) -> AResult<Def> {
+        self.read(|a| a.with_defs(id, |def| def.clone()))
+    }
+
+    pub fn def_parents(&self, id: u32) -> AResult<Vec<(u32, String)>> {
+        self.read(|a| {
+            let mut result = vec![];
+            let mut next = id;
+            loop {
+                match a.with_defs_and_then(next, |def| def.parent.map(|p| (p, def.name.clone()))) {
+                    Some((id, name)) => {
+                        result.insert(0, (id, name));
+                        next = id;
+                    }
+                    None => {
+                        return Some(result);
+                    }
+                }
+            }
         })
     }
 
@@ -387,7 +409,7 @@ pub struct Span {
     pub column_end: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Def {
     pub kind: raw::DefKind,
     pub span: Span,
