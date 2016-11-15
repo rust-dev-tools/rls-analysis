@@ -155,6 +155,12 @@ impl AnalysisHost {
         self.read(|a| a.with_defs(id, |def| def.clone()))
     }
 
+    pub fn for_each_child_def<F, T>(&self, id: u32, f: F) -> AResult<Vec<T>>
+        where F: Fn(u32, &Def) -> T
+    {
+        self.read(|a| a.for_each_child(id, f))
+    }
+
     pub fn def_parents(&self, id: u32) -> AResult<Vec<(u32, String)>> {
         self.read(|a| {
             let mut result = vec![];
@@ -392,6 +398,7 @@ pub struct PerCrateAnalysis {
     def_id_for_span: HashMap<Span, u32>,
     defs: HashMap<u32, Def>,
     defs_per_file: HashMap<PathBuf, Vec<u32>>,
+    children: HashMap<u32, Vec<u32>>,
     def_names: HashMap<String, Vec<u32>>,
     ref_spans: HashMap<u32, Vec<Span>>,
     globs: HashMap<Span, Glob>,
@@ -432,6 +439,7 @@ impl PerCrateAnalysis {
             def_id_for_span: HashMap::new(),
             defs: HashMap::new(),
             defs_per_file: HashMap::new(),
+            children: HashMap::new(),
             def_names: HashMap::new(),
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
@@ -489,6 +497,19 @@ impl Analysis {
     {
         self.for_each_crate(|c| c.defs.get(&id).and_then(&f))
     }
+
+    fn for_each_child<F, T>(&self, id: u32, f: F) -> Option<Vec<T>>
+        where F: Fn(u32, &Def) -> T
+    {
+        for (_, ref per_crate) in self.per_crate.iter() {
+            if let Some(children) = per_crate.children.get(&id) {
+                return Some(children.iter().map(|id| f(*id, &per_crate.defs[id])).collect());
+            }
+        }
+
+        None
+    }
+
 
     fn with_ref_spans<F, T>(&self, id: u32, f: F) -> Option<T>
         where F: Fn(&Vec<Span>) -> T

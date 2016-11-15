@@ -163,7 +163,12 @@ impl CrateReader {
                     analysis.def_id_for_span.insert(span.clone(), id);
                     analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
                 }
-                //println!("record def {}: {:?}", d.name, span);
+                let parent = d.parent.map(|id| self.id_from_compiler_id(&id));
+                if let Some(parent) = parent {
+                    analysis.children.entry(parent).or_insert_with(|| vec![]).push(id);
+                }
+
+                trace!("record def {}: {:?}", d.name, span);
                 let def = Def {
                     kind: d.kind,
                     span: span,
@@ -171,7 +176,7 @@ impl CrateReader {
                     value: d.value,
                     qualname: format!("{}{}", self.crate_name, d.qualname),
                     api_crate: api_crate,
-                    parent: d.parent.map(|id| self.id_from_compiler_id(&id)),
+                    parent: parent,
                     docs: match d.docs.find("\n\n") {
                         Some(index) if !self.full_docs => d.docs[..index].to_owned(),
                         _ => d.docs,
@@ -189,7 +194,7 @@ impl CrateReader {
             let span = lower_span(&r.span, Some(&self.project_dir));
             if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) &&
                (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id)) {
-                //println!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, def_id);
+                trace!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, def_id);
                 analysis.def_id_for_span.insert(span.clone(), def_id);
                 analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
             }
