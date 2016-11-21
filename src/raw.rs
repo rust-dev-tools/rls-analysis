@@ -171,8 +171,10 @@ pub struct Def {
     pub name: String,
     pub qualname: String,
     pub parent: Option<CompilerId>,
+    pub children: Option<Vec<CompilerId>>,
     pub value: String,
     pub docs: String,
+    pub sig: Option<Signature>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize)]
@@ -239,6 +241,23 @@ impl Deserialize for DefKind {
             }
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Signature {
+    pub span: SpanData,
+    pub text: String,
+    pub ident_start: usize,
+    pub ident_end: usize,
+    pub defs: Vec<SigElement>,
+    pub refs: Vec<SigElement>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SigElement {
+    pub id: CompilerId,
+    pub start: usize,
+    pub end: usize,
 }
 
 #[derive(Deserialize, Debug)]

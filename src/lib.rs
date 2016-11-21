@@ -166,7 +166,9 @@ impl AnalysisHost {
             let mut result = vec![];
             let mut next = id;
             loop {
-                match a.with_defs_and_then(next, |def| def.parent.map(|p| (p, def.name.clone()))) {
+                match a.with_defs_and_then(next, |def| def.parent.and_then(|p| {
+                    a.with_defs(p, |def| (p, def.name.clone()))
+                })) {
                     Some((id, name)) => {
                         result.insert(0, (id, name));
                         next = id;
@@ -426,6 +428,24 @@ pub struct Def {
     pub parent: Option<u32>,
     pub value: String,
     pub docs: String,
+    pub sig: Option<Signature>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Signature {
+    pub span: Span,
+    pub text: String,
+    pub ident_start: usize,
+    pub ident_end: usize,
+    pub defs: Vec<SigElement>,
+    pub refs: Vec<SigElement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SigElement {
+    pub id: u32,
+    pub start: usize,
+    pub end: usize,
 }
 
 #[derive(Debug)]
@@ -507,9 +527,8 @@ impl Analysis {
             }
         }
 
-        None
+        Some(vec![])
     }
-
 
     fn with_ref_spans<F, T>(&self, id: u32, f: F) -> Option<T>
         where F: Fn(&Vec<Span>) -> T

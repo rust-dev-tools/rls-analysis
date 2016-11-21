@@ -9,10 +9,11 @@
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
 use super::raw::{self, Format};
-use super::{AnalysisHost, PerCrateAnalysis, Span, NULL, Def, Glob};
+use super::{AnalysisHost, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement};
 use util;
 
 use std::collections::HashMap;
+use std::iter::Extend;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -167,8 +168,12 @@ impl CrateReader {
                 if let Some(parent) = parent {
                     analysis.children.entry(parent).or_insert_with(|| vec![]).push(id);
                 }
+                if let Some(children) = d.children {
+                    if !children.is_empty() {
+                        analysis.children.entry(id).or_insert_with(|| vec![]).extend(children.iter().map(|id| self.id_from_compiler_id(&id)));
+                    }
+                }
 
-                trace!("record def {}: {:?}", d.name, span);
                 let def = Def {
                     kind: d.kind,
                     span: span,
@@ -181,9 +186,18 @@ impl CrateReader {
                         Some(index) if !self.full_docs => d.docs[..index].to_owned(),
                         _ => d.docs,
                     },
+                    sig: d.sig.map(|ref s| self.lower_sig(s, Some(&self.project_dir))),
                 };
+                trace!("record def: {:?}", def);
 
                 analysis.defs.insert(id, def);
+            }
+        }
+
+        // We must now run a pass over the defs setting parents, because save-analysis often omits parent info
+        for (parent, children) in &analysis.children {
+            for c in children {
+                analysis.defs.get_mut(&c).map(|def| def.parent = Some(*parent));
             }
         }
     }
@@ -198,6 +212,25 @@ impl CrateReader {
                 analysis.def_id_for_span.insert(span.clone(), def_id);
                 analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
             }
+        }
+    }
+
+    fn lower_sig(&self, raw_sig: &raw::Signature, project_dir: Option<&Path>) -> Signature {
+        Signature {
+            span: lower_span(&raw_sig.span, project_dir),
+            text: raw_sig.text.clone(),
+            ident_start: raw_sig.ident_start,
+            ident_end: raw_sig.ident_end,
+            defs: raw_sig.defs.iter().map(|se| self.lower_sig_element(se)).collect(),
+            refs: raw_sig.refs.iter().map(|se| self.lower_sig_element(se)).collect(),
+        }
+    }
+
+    fn lower_sig_element(&self, raw_se: &raw::SigElement) -> SigElement {
+        SigElement {
+            id: self.id_from_compiler_id(&raw_se.id),
+            start: raw_se.start,
+            end: raw_se.end,
         }
     }
 
