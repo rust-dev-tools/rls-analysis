@@ -102,7 +102,6 @@ impl AnalysisLoader for CargoAnalysisLoader {
         let path_prefix = path_prefix.as_ref().unwrap();
         let target = self.target.to_string();
 
-        // TODO shouldn't hard-code these paths, it's cargo-specific
         // TODO deps path allows to break out of 'sandbox' - is that Ok?
         let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
         let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
@@ -281,9 +280,18 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         let t_start = Instant::now();
         let result = self.read(|a| {
             a.with_def_names(name, |defs| {
+                println!("defs: {:?}", defs);
                 defs.into_iter()
-                     .flat_map(|id| {
-                        a.with_ref_spans(*id, |v| v.clone()).unwrap_or(vec![]).into_iter()
+                    .flat_map(|id| {
+                        a.with_ref_spans(*id, |refs|
+                            {
+                            def_span!(a, *id)
+                             .into_iter()
+                             .chain(refs.iter().cloned())
+                             .collect::<Vec<_>>()})
+                         .or(def_span!(a, *id).map(|s| vec![s]))
+                         .unwrap_or(vec![])
+                         .into_iter()
                      })
                      .collect(): Vec<Span>
              })
