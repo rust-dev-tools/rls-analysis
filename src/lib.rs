@@ -22,6 +22,8 @@ pub mod raw;
 mod lowering;
 mod listings;
 mod util;
+#[cfg(test)]
+mod test;
 
 pub use self::raw::Target;
 use std::collections::HashMap;
@@ -66,22 +68,18 @@ impl AnalysisHost {
 
     pub fn reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
         let mut needs_hard_reload = false;
-        match self.path_prefix.lock() {
-            Ok(pp) => {
-                if pp.is_none() || pp.as_ref().unwrap() != path_prefix {
-                    needs_hard_reload = true;
-                }
+        {
+            let pp = self.path_prefix.lock().map_err(|_| ())?;
+            if pp.is_none() || pp.as_ref().unwrap() != path_prefix {
+                needs_hard_reload = true;
             }
-            _ => return Err(()),
         }
-        let timestamps = match self.analysis.lock() {
-            Ok(a) => {
-                match &*a {
-                    &Some(ref a) => a.timestamps(),
-                    &None => { needs_hard_reload = true; HashMap::new() },
-                }
-            }
-            Err(_) => return Err(()),
+        let timestamps = match &*self.analysis.lock().map_err(|_| ())? {
+            &Some(ref a) => a.timestamps(),
+            &None => {
+                needs_hard_reload = true;
+                HashMap::new()
+            },
         };
 
         if needs_hard_reload {
@@ -91,13 +89,9 @@ impl AnalysisHost {
         let raw_analysis = raw::Analysis::read_incremental(path_prefix, self.target, timestamps);
 
         lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, self, |host, per_crate, path| {
-            match host.analysis.lock() {
-                Ok(mut a) => {
-                    a.as_mut().unwrap().update(per_crate, path);
-                    Ok(())
-                }
-                Err(_) => Err(()),
-            }
+            let mut a = host.analysis.lock().map_err(|_| ())?;
+            a.as_mut().unwrap().update(per_crate, path);
+            Ok(())
         })
     }
 
@@ -114,25 +108,18 @@ impl AnalysisHost {
             Ok(())
         })?;
 
-        match self.path_prefix.lock() {
-            Ok(mut pp) => {
-                *pp = Some(path_prefix.to_owned());
-            }
-            Err(_) => return Err(()),
+        {
+            let mut pp = self.path_prefix.lock().map_err(|_| ())?;
+            *pp = Some(path_prefix.to_owned());
         }
-        match self.master_crate_map.lock() {
-            Ok(mut mcm) => {
-                *mcm = new_host.master_crate_map.into_inner().unwrap();
-            }
-            Err(_) => return Err(()),
+        {
+            let mut mcm = self.master_crate_map.lock().map_err(|_| ())?;
+            *mcm = new_host.master_crate_map.into_inner().unwrap();
         }
-        match self.analysis.lock() {
-            Ok(mut a) => {
-                *a = Some(new_host.analysis.into_inner().unwrap().unwrap());
-                Ok(())
-            }
-            Err(_) => Err(()),
-        }
+
+        let mut a = self.analysis.lock().map_err(|_| ())?;
+        *a = Some(new_host.analysis.into_inner().unwrap().unwrap());
+        Ok(())
     }
 
     /// Note that self.has_def == true =/> self.goto_def.is_some(), since if the

@@ -85,6 +85,7 @@ impl Analysis {
             };
 
             for l in listing.files {
+                info!{"Considering {:?}", l}
                 if let ListingKind::File(ref time) = l.kind {
                     let mut path = p.to_path_buf();
                     path.push(&l.name);
@@ -117,6 +118,7 @@ impl Analysis {
     }
 
     fn read_crate_data(path: &Path) -> Option<Analysis> {
+        info!("read_crate_data {:?}", path);
         // TODO unwraps
         let mut file = File::open(&path).unwrap();
         let mut buf = String::new();
