@@ -17,6 +17,8 @@ extern crate serde_json;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate derive_new;
 
 pub mod raw;
 mod lowering;
@@ -76,14 +78,11 @@ impl AnalysisLoader for CargoAnalysisLoader {
     }
 
     fn fresh_host(&self) -> AnalysisHost<Self> {
-        AnalysisHost {
-            analysis: Mutex::new(None),
-            master_crate_map: Mutex::new(HashMap::new()),
-            loader: CargoAnalysisLoader {
-                path_prefix: Mutex::new(None),
-                target: self.target,
-            }
-        }
+        let pp = self.path_prefix.lock().unwrap();
+        AnalysisHost::new_with_loader(CargoAnalysisLoader {
+            path_prefix: Mutex::new(pp.clone()),
+            target: self.target,
+        })
     }
 
     fn set_path_prefix(&self, path_prefix: &Path) {
