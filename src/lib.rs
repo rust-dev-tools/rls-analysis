@@ -114,7 +114,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
     }
 }
 
-impl<L: AnalysisLoader> AnalysisHost<L> {
+impl AnalysisHost<CargoAnalysisLoader> {
     pub fn new(target: Target) -> AnalysisHost {
         AnalysisHost {
             analysis: Mutex::new(None),
@@ -124,8 +124,10 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                 target: target,
             }
         }
-    }
+    }    
+}
 
+impl<L: AnalysisLoader> AnalysisHost<L> {
     pub fn new_with_loader(l: L) -> AnalysisHost<L> {
         AnalysisHost {
             analysis: Mutex::new(None),
