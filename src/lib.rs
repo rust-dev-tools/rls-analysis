@@ -31,11 +31,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 
-pub struct AnalysisHost {
+pub struct AnalysisHost<L: AnalysisLoader = CargoAnalysisLoader> {
     analysis: Mutex<Option<Analysis>>,
-    path_prefix: Mutex<Option<PathBuf>>,
-    target: Target,
     master_crate_map: Mutex<HashMap<String, u32>>,
+    loader: L,
+}
+
+pub struct CargoAnalysisLoader {
+    path_prefix: Mutex<Option<PathBuf>>,
+    target: Target,    
 }
 
 pub type AResult<T> = Result<T, ()>;
@@ -56,37 +60,93 @@ macro_rules! def_span {
     }
 }
 
-impl AnalysisHost {
+pub trait AnalysisLoader: Sized {
+    fn needs_hard_reload(&self, path_prefix: &Path) -> bool;
+    fn fresh_host(&self) -> AnalysisHost<Self>;
+    fn set_path_prefix(&self, path_prefix: &Path);
+    fn abs_path_prefix(&self) -> Option<PathBuf>;
+    fn iter_paths<F, T>(&self, f: F) -> Vec<T>
+        where F: Fn(&Path) -> Vec<T>;
+}
+
+impl AnalysisLoader for CargoAnalysisLoader {
+    fn needs_hard_reload(&self, path_prefix: &Path) -> bool {
+        let pp = self.path_prefix.lock().unwrap();
+        pp.is_none() || pp.as_ref().unwrap() != path_prefix
+    }
+
+    fn fresh_host(&self) -> AnalysisHost<Self> {
+        AnalysisHost {
+            analysis: Mutex::new(None),
+            master_crate_map: Mutex::new(HashMap::new()),
+            loader: CargoAnalysisLoader {
+                path_prefix: Mutex::new(None),
+                target: self.target,
+            }
+        }
+    }
+
+    fn set_path_prefix(&self, path_prefix: &Path) {
+        let mut pp = self.path_prefix.lock().unwrap();
+        *pp = Some(path_prefix.to_owned())
+    }
+
+    fn abs_path_prefix(&self) -> Option<PathBuf> {
+        let p = self.path_prefix.lock().unwrap();
+        p.as_ref().map(|ref s| Path::new(s).canonicalize().unwrap().to_owned())
+    }
+
+    fn iter_paths<F, T>(&self, f: F) -> Vec<T>
+        where F: Fn(&Path) -> Vec<T>
+    {
+        let path_prefix = self.path_prefix.lock().unwrap();
+        let path_prefix = path_prefix.as_ref().unwrap();
+        let target = self.target.to_string();
+
+        // TODO shouldn't hard-code these paths, it's cargo-specific
+        // TODO deps path allows to break out of 'sandbox' - is that Ok?
+        let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
+        let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
+        let libs_path = path_prefix.join("libs").join("save-analysis");
+        let paths = &[&libs_path,
+                      &deps_path,
+                      &principle_path];
+
+        paths.iter().flat_map(|p| f(p).into_iter()).collect()
+    }
+}
+
+impl<L: AnalysisLoader> AnalysisHost<L> {
     pub fn new(target: Target) -> AnalysisHost {
         AnalysisHost {
             analysis: Mutex::new(None),
-            path_prefix: Mutex::new(None),
-            target: target,
             master_crate_map: Mutex::new(HashMap::new()),
+            loader: CargoAnalysisLoader {
+                path_prefix: Mutex::new(None),
+                target: target,
+            }
+        }
+    }
+
+    pub fn new_with_loader(l: L) -> AnalysisHost<L> {
+        AnalysisHost {
+            analysis: Mutex::new(None),
+            master_crate_map: Mutex::new(HashMap::new()),
+            loader: l,
         }
     }
 
     pub fn reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
-        let mut needs_hard_reload = false;
-        {
-            let pp = self.path_prefix.lock().map_err(|_| ())?;
-            if pp.is_none() || pp.as_ref().unwrap() != path_prefix {
-                needs_hard_reload = true;
-            }
-        }
-        let timestamps = match &*self.analysis.lock().map_err(|_| ())? {
-            &Some(ref a) => a.timestamps(),
-            &None => {
-                needs_hard_reload = true;
-                HashMap::new()
-            },
-        };
-
-        if needs_hard_reload {
+        if self.loader.needs_hard_reload(path_prefix) {
             return self.hard_reload(path_prefix, full_docs);
         }
 
-        let raw_analysis = raw::Analysis::read_incremental(path_prefix, self.target, timestamps);
+        let timestamps = match &*self.analysis.lock().map_err(|_| ())? {
+            &Some(ref a) => a.timestamps(),
+            &None => HashMap::new(),
+        };
+
+        let raw_analysis = raw::Analysis::read_incremental(&self.loader, timestamps);
 
         lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, self, |host, per_crate, path| {
             let mut a = host.analysis.lock().map_err(|_| ())?;
@@ -97,21 +157,24 @@ impl AnalysisHost {
 
     // Reloads the entire project's analysis data.
     pub fn hard_reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
-        let raw_analysis = raw::Analysis::read(path_prefix, self.target);
+        self.loader.set_path_prefix(path_prefix);
+        let raw_analysis = raw::Analysis::read_incremental(&self.loader, HashMap::new());
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.
-        let mut new_host = AnalysisHost::new(self.target);
+        let mut new_host = self.loader.fresh_host();
         new_host.analysis = Mutex::new(Some(Analysis::new()));
-        lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, &mut new_host, |host, per_crate, path| {
+        let lowering_result = lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, &mut new_host, |host, per_crate, path| {
             host.analysis.lock().unwrap().as_mut().unwrap().per_crate.insert(path, per_crate);
             Ok(())
-        })?;
+        });
 
-        {
-            let mut pp = self.path_prefix.lock().map_err(|_| ())?;
-            *pp = Some(path_prefix.to_owned());
+        if let Err(s) = lowering_result {
+            let mut a = self.analysis.lock().map_err(|_| ())?;
+            *a = None;
+            return Err(s);
         }
+
         {
             let mut mcm = self.master_crate_map.lock().map_err(|_| ())?;
             *mcm = new_host.master_crate_map.into_inner().unwrap();
@@ -270,7 +333,7 @@ impl AnalysisHost {
         // e.g., https://doc.rust-lang.org/nightly/std/string/String.t.html
         self.read(|a| {
             a.def_id_for_span(span)
-             .and_then(|id| a.with_defs_and_then(id, |def| AnalysisHost::mk_doc_url(def, a)))
+             .and_then(|id| a.with_defs_and_then(id, |def| AnalysisHost::<L>::mk_doc_url(def, a)))
         })
     }
 
@@ -278,14 +341,11 @@ impl AnalysisHost {
         // e.g., https://github.com/rust-lang/rust/blob/master/src/libcollections/string.rs#L261-L263
 
         // FIXME would be nice not to do this every time.
-        let path_prefix = &{
-            let p = self.path_prefix.lock().unwrap();
-            p.as_ref().map(|ref s| Path::new(s).canonicalize().unwrap().to_owned())
-        };
+        let path_prefix = &self.loader.abs_path_prefix();
 
         self.read(|a| {
             a.def_id_for_span(span)
-             .and_then(|id| a.with_defs_and_then(id, |def| AnalysisHost::mk_src_url(def, path_prefix.as_ref(), a)))
+             .and_then(|id| a.with_defs_and_then(id, |def| AnalysisHost::<L>::mk_src_url(def, path_prefix.as_ref(), a)))
         })
     }
 

@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use AnalysisLoader;
 use listings::{DirectoryListing, ListingKind};
 
 use serde;
@@ -68,11 +69,10 @@ impl fmt::Display for Target {
 }
 
 impl Analysis {
-    pub fn read_incremental(path_prefix: &Path,
-                            target: Target,
-                            timestamps: HashMap<PathBuf, Option<SystemTime>>)
-                            -> Vec<Crate> {
-        Self::iter_paths(path_prefix, target, |p| {
+    pub fn read_incremental<L: AnalysisLoader>(loader: &L,
+                                               timestamps: HashMap<PathBuf, Option<SystemTime>>)
+                                               -> Vec<Crate> {
+        loader.iter_paths(|p| {
             use std::time::*;
 
             let t = Instant::now();
@@ -113,8 +113,8 @@ impl Analysis {
         })
     }
 
-    pub fn read(path_prefix: &Path, target: Target) -> Vec<Crate> {
-        Self::read_incremental(path_prefix, target, HashMap::new())
+    pub fn read<L: AnalysisLoader>(loader: &L) -> Vec<Crate> {
+        Self::read_incremental(loader, HashMap::new())
     }
 
     fn read_crate_data(path: &Path) -> Option<Analysis> {
@@ -124,23 +124,6 @@ impl Analysis {
         let mut buf = String::new();
         file.read_to_string(&mut buf).unwrap();
         serde_json::from_str(&buf).ok()
-    }
-
-    fn iter_paths<F, T>(path_prefix: &Path, target: Target, f: F) -> Vec<T>
-        where F: Fn(&Path) -> Vec<T>
-    {
-        let target = target.to_string();
-
-        // TODO shouldn't hard-code these paths, it's cargo-specific
-        // TODO deps path allows to break out of 'sandbox' - is that Ok?
-        let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
-        let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
-        let libs_path = path_prefix.join("libs").join("save-analysis");
-        let paths = &[&libs_path,
-                      &deps_path,
-                      &principle_path];
-
-        paths.iter().flat_map(|p| f(p).into_iter()).collect()
     }
 }
 

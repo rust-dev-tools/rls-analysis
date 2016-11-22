@@ -9,7 +9,7 @@
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
 use super::raw::{self, Format};
-use super::{AnalysisHost, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement};
+use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement};
 use util;
 
 use std::collections::HashMap;
@@ -18,8 +18,9 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 // f is a function used to record the lowered crate into analysis.
-pub fn lower<F>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_docs: bool, analysis: &AnalysisHost, mut f: F) -> Result<(), ()>
-    where F: FnMut(&AnalysisHost, PerCrateAnalysis, PathBuf) -> Result<(), ()>
+pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_docs: bool, analysis: &AnalysisHost<L>, mut f: F) -> Result<(), ()>
+    where F: FnMut(&AnalysisHost<L>, PerCrateAnalysis, PathBuf) -> Result<(), ()>,
+          L: AnalysisLoader
 {
     let rss = util::get_resident().unwrap_or(0);
     let t_start = Instant::now();
@@ -100,11 +101,13 @@ impl CrateReader {
         }
     }
 
-    fn read_crate(project_analysis: &AnalysisHost,
-                  krate: raw::Crate,
-                  project_dir: &Path,
-                  full_docs: bool)
-                  -> (PerCrateAnalysis, PathBuf) {
+    fn read_crate<L: AnalysisLoader>(
+        project_analysis: &AnalysisHost<L>,
+        krate: raw::Crate,
+        project_dir: &Path,
+        full_docs: bool)
+        -> (PerCrateAnalysis, PathBuf)
+    {
         let reader = CrateReader::from_prelude(krate.analysis.prelude.unwrap(),
                                                &mut project_analysis.master_crate_map.lock().unwrap(),
                                                project_dir,
@@ -124,7 +127,9 @@ impl CrateReader {
         (per_crate, krate.path)
     }
 
-    fn read_imports(&self, imports: Vec<raw::Import>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost) {
+    fn read_imports<L: AnalysisLoader>(
+        &self, imports: Vec<raw::Import>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>
+    ) {
         for i in imports {
             let span = lower_span(&i.span, Some(&self.project_dir));
             if !i.value.is_empty() {
@@ -202,7 +207,7 @@ impl CrateReader {
         }
     }
 
-    fn read_refs(&self, refs: Vec<raw::Ref>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost) {
+    fn read_refs<L: AnalysisLoader>(&self, refs: Vec<raw::Ref>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>) {
         for r in refs {
             let def_id = self.id_from_compiler_id(&r.ref_id);
             let span = lower_span(&r.span, Some(&self.project_dir));
