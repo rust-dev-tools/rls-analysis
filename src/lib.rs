@@ -11,16 +11,13 @@
 #![feature(proc_macro)]
 
 extern crate rustc_serialize;
-extern crate serde;
-extern crate serde_json;
-#[macro_use]
-extern crate serde_derive;
 #[macro_use]
 extern crate log;
 #[macro_use]
 extern crate derive_new;
 
 pub mod raw;
+pub mod compiler_message;
 mod lowering;
 mod listings;
 mod util;
@@ -423,7 +420,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct SymbolResult {
     pub id: u32,
     pub name: String,
@@ -464,7 +461,7 @@ pub struct PerCrateAnalysis {
     timestamp: Option<SystemTime>,
 }
 
-#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(RustcDecodable, Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Span {
     // Note the ordering of fields for the Ord impl.
     pub file_name: PathBuf,
