@@ -12,6 +12,8 @@ use super::raw::{self, Format};
 use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement};
 use util;
 
+use span;
+
 use std::collections::HashMap;
 use std::iter::Extend;
 use std::path::{Path, PathBuf};
@@ -57,13 +59,11 @@ pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&Path>) -> Span 
 
 
     // Rustc uses 1-indexed rows and columns, the RLS uses 0-indexed.
-    Span {
-        file_name: file_name,
-        line_start: raw_span.line_start - 1,
-        column_start: raw_span.column_start - 1,
-        line_end: raw_span.line_end - 1,
-        column_end: raw_span.column_end - 1,
-    }
+    span::Span::new(raw_span.line_start.zero_indexed(),
+                    raw_span.line_end.zero_indexed(),
+                    raw_span.column_start.zero_indexed(),
+                    raw_span.column_end.zero_indexed(),
+                    file_name)
 }
 
 struct CrateReader {
@@ -163,7 +163,7 @@ impl CrateReader {
                         d.value = String::new();
                     }
                 } else {
-                    let file_name = span.file_name.clone();
+                    let file_name = span.file.clone();
                     analysis.defs_per_file.entry(file_name).or_insert_with(|| vec![]).push(id);
 
                     analysis.def_id_for_span.insert(span.clone(), id);
@@ -224,8 +224,8 @@ impl CrateReader {
         Signature {
             span: lower_span(&raw_sig.span, project_dir),
             text: raw_sig.text.clone(),
-            ident_start: raw_sig.ident_start,
-            ident_end: raw_sig.ident_end,
+            ident_start: raw_sig.ident_start as u32,
+            ident_end: raw_sig.ident_end as u32,
             defs: raw_sig.defs.iter().map(|se| self.lower_sig_element(se)).collect(),
             refs: raw_sig.refs.iter().map(|se| self.lower_sig_element(se)).collect(),
         }

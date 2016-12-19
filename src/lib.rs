@@ -19,6 +19,7 @@ extern crate serde_derive;
 extern crate log;
 #[macro_use]
 extern crate derive_new;
+extern crate rls_span as span;
 
 pub mod raw;
 mod lowering;
@@ -162,9 +163,9 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.
-        let mut new_host = self.loader.fresh_host();
-        new_host.analysis = Mutex::new(Some(Analysis::new()));
-        let lowering_result = lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, &mut new_host, |host, per_crate, path| {
+        let mut foo = self.loader.fresh_host();
+        foo.analysis = Mutex::new(Some(Analysis::new()));
+        let lowering_result = lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, &mut foo, |host, per_crate, path| {
             host.analysis.lock().unwrap().as_mut().unwrap().per_crate.insert(path, per_crate);
             Ok(())
         });
@@ -177,11 +178,11 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
         {
             let mut mcm = self.master_crate_map.lock().map_err(|_| ())?;
-            *mcm = new_host.master_crate_map.into_inner().unwrap();
+            *mcm = foo.master_crate_map.into_inner().unwrap();
         }
 
         let mut a = self.analysis.lock().map_err(|_| ())?;
-        *a = Some(new_host.analysis.into_inner().unwrap().unwrap());
+        *a = Some(foo.analysis.into_inner().unwrap().unwrap());
         Ok(())
     }
 
@@ -404,8 +405,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             Some(pp) => pp,
             None => return None,
         };
-        let file_name = &def.span.file_name;
-        let file_path = &Path::new(file_name);
+        let file_path = &def.span.file;
         let file_path = match file_path.strip_prefix(&path_prefix) {
             Ok(p) => p,
             Err(_) => return None,
@@ -415,8 +415,8 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             Some(format!("{}/{}#L{}-L{}",
                          analysis.src_url_base,
                          file_path.to_str().unwrap(),
-                         def.span.line_start + 1,
-                         def.span.line_end + 1))
+                         def.span.range.row_start.one_indexed().0,
+                         def.span.range.row_end.one_indexed().0))
         } else {
             None
         }
@@ -442,6 +442,8 @@ impl SymbolResult {
     }
 }
 
+type Span = span::Span<span::ZeroIndexed>;
+
 #[derive(Debug)]
 pub struct Analysis {
     per_crate: HashMap<PathBuf, PerCrateAnalysis>,
@@ -464,16 +466,6 @@ pub struct PerCrateAnalysis {
     timestamp: Option<SystemTime>,
 }
 
-#[derive(Debug, Clone, Hash, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Span {
-    // Note the ordering of fields for the Ord impl.
-    pub file_name: PathBuf,
-    pub line_start: usize,
-    pub column_start: usize,
-    pub line_end: usize,
-    pub column_end: usize,
-}
-
 #[derive(Debug, Clone)]
 pub struct Def {
     pub kind: raw::DefKind,
@@ -491,8 +483,8 @@ pub struct Def {
 pub struct Signature {
     pub span: Span,
     pub text: String,
-    pub ident_start: usize,
-    pub ident_end: usize,
+    pub ident_start: u32,
+    pub ident_end: u32,
     pub defs: Vec<SigElement>,
     pub refs: Vec<SigElement>,
 }

@@ -12,6 +12,7 @@ use listings::{DirectoryListing, ListingKind};
 use serde;
 use serde::Deserialize;
 use serde_json;
+use span;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -319,10 +320,9 @@ pub struct SpanData {
     pub file_name: PathBuf,
     pub byte_start: u32,
     pub byte_end: u32,
-    /// 1-based.
-    pub line_start: usize,
-    pub line_end: usize,
-    /// 1-based, character offset.
-    pub column_start: usize,
-    pub column_end: usize,
+    pub line_start: span::Row<span::OneIndexed>,
+    pub line_end: span::Row<span::OneIndexed>,
+    // character offset.
+    pub column_start: span::Column<span::OneIndexed>,
+    pub column_end: span::Column<span::OneIndexed>,
 }

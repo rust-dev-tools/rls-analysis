@@ -4,6 +4,7 @@ version = "0.1.0"
 dependencies = [
  "derive-new 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rls-span 0.1.0 (git+https://github.com/nrc/rls-span)",
  "rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 0.8.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 0.8.19 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -48,6 +49,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "quote"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "rls-span"
+version = "0.1.0"
+source = "git+https://github.com/nrc/rls-span#c6b40f80c755f4d676d222ccfe13df67cd6239e8"
+dependencies = [
+ "serde 0.8.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 0.8.19 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "rustc-serialize"
@@ -127,6 +137,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum num-traits 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)" = "a16a42856a256b39c6d3484f097f6713e14feacd9bfb02290917904fae46c81c"
 "checksum quote 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "4c5cf478fe1006dbcc72567121d23dbdae5f1632386068c5c86ff4f645628504"
 "checksum quote 0.3.10 (registry+https://github.com/rust-lang/crates.io-index)" = "6732e32663c9c271bfc7c1823486b471f18c47a2dbf87c066897b7b51afc83be"
+"checksum rls-span 0.1.0 (git+https://github.com/nrc/rls-span)" = "<none>"
 "checksum rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)" = "237546c689f20bb44980270c73c3b9edd0891c1be49cc1274406134a66d3957b"
 "checksum serde 0.8.19 (registry+https://github.com/rust-lang/crates.io-index)" = "58a19c0871c298847e6b68318484685cd51fa5478c0c905095647540031356e5"
 "checksum serde_codegen 0.8.19 (registry+https://github.com/rust-lang/crates.io-index)" = "ce29a6ae259579707650ec292199b5fed2c0b8e2a4bdc994452d24d1bcf2242a"
