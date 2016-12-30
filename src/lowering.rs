@@ -42,7 +42,7 @@ pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_doc
     }
 
     let time = t_start.elapsed();
-    let rss = util::get_resident().unwrap_or(0) - rss;
+    let rss = util::get_resident().unwrap_or(0) as isize - rss as isize();
     info!("Total lowering time: {:.2}s", time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
     info!("Diff in rss: {:.2}KB", rss as f64 / 1000.0);
 
@@ -193,7 +193,7 @@ impl CrateReader {
                     },
                     sig: d.sig.map(|ref s| self.lower_sig(s, Some(&self.project_dir))),
                 };
-                trace!("record def: {:?}", def);
+                trace!("record def: {:?}/{:?} ({}): {:?}", id, d.id, self.crate_map[d.id.krate as usize],  def);
 
                 analysis.defs.insert(id, def);
             }
@@ -211,11 +211,12 @@ impl CrateReader {
         for r in refs {
             let def_id = self.id_from_compiler_id(&r.ref_id);
             let span = lower_span(&r.span, Some(&self.project_dir));
-            if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) &&
-               (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id)) {
-                trace!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, def_id);
-                analysis.def_id_for_span.insert(span.clone(), def_id);
-                analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
+            if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) {
+                if let Some(def_id) = abs_ref_id(def_id, analysis, project_analysis) {
+                    trace!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, def_id);
+                    analysis.def_id_for_span.insert(span.clone(), def_id);
+                    analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
+                }
             }
         }
     }
@@ -250,4 +251,13 @@ impl CrateReader {
         let crate_local = id.index & 0x00ffffff;
         krate << 24 | crate_local
     }
+}
+
+fn abs_ref_id<L: AnalysisLoader>(id: u32, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>) -> Option<u32> {
+    if project_analysis.has_def(id) || analysis.defs.contains_key(&id) {
+        return Some(id)
+    }
+
+    // TODO
+    None
 }

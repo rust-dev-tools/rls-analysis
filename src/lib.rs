@@ -31,6 +31,7 @@ mod test;
 pub use self::raw::Target;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 
@@ -106,13 +107,27 @@ impl AnalysisLoader for CargoAnalysisLoader {
         // TODO deps path allows to break out of 'sandbox' - is that Ok?
         let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
         let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
-        let libs_path = path_prefix.join("libs").join("save-analysis");
+        let libs_path = sys_root_path().join("lib").join("save-analysis");
         let paths = &[&libs_path,
                       &deps_path,
                       &principle_path];
 
         paths.iter().flat_map(|p| f(p).into_iter()).collect()
     }
+}
+
+fn sys_root_path() -> PathBuf {
+    option_env!("SYSROOT")
+        .map(|s| PathBuf::from(s))
+        .or(Command::new("rustc")
+            .arg("--print")
+            .arg("sysroot")
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .map(|s| PathBuf::from(s.trim())))
+        .expect("need to specify SYSROOT env var, \
+                 or rustc must be in PATH")
 }
 
 impl AnalysisHost<CargoAnalysisLoader> {
