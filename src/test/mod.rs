@@ -62,16 +62,16 @@ fn test_hello() {
     assert_eq!(def.kind, DefKind::Function);
     let refs = host.find_all_refs_by_id(id).unwrap();
     assert_eq!(refs.len(), 2);
-    assert_eq!(refs[0].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[0].line_start, 0);
-    assert_eq!(refs[1].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[1].line_start, 6);
+    assert_eq!(refs[0].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[0].range.row_start.0, 0);
+    assert_eq!(refs[1].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[1].range.row_start.0, 6);
     let refs = host.search("print_hello").unwrap();
     assert_eq!(refs.len(), 2);
-    assert_eq!(refs[0].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[0].line_start, 0);
-    assert_eq!(refs[1].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[1].line_start, 6);
+    assert_eq!(refs[0].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[0].range.row_start.0, 0);
+    assert_eq!(refs[1].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[1].range.row_start.0, 6);
 
     let ids = host.search_for_id("main").unwrap();
     assert_eq!(ids.len(), 1);
@@ -81,12 +81,12 @@ fn test_hello() {
     assert_eq!(def.kind, DefKind::Function);
     let refs = host.find_all_refs_by_id(id).unwrap();
     assert_eq!(refs.len(), 1);
-    assert_eq!(refs[0].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[0].line_start, 5);
+    assert_eq!(refs[0].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[0].range.row_start.0, 5);
     let refs = host.search("main").unwrap();
     assert_eq!(refs.len(), 1);
-    assert_eq!(refs[0].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[0].line_start, 5);
+    assert_eq!(refs[0].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[0].range.row_start.0, 5);
 
     let ids = host.search_for_id("name").unwrap();
     assert_eq!(ids.len(), 1);
@@ -96,16 +96,16 @@ fn test_hello() {
     assert_eq!(def.kind, DefKind::Local);
     let refs = host.find_all_refs_by_id(id).unwrap();
     assert_eq!(refs.len(), 2);
-    assert_eq!(refs[0].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[0].line_start, 1);
-    assert_eq!(refs[1].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[1].line_start, 2);
+    assert_eq!(refs[0].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[0].range.row_start.0, 1);
+    assert_eq!(refs[1].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[1].range.row_start.0, 2);
     let refs = host.search("name").unwrap();
     assert_eq!(refs.len(), 2);
-    assert_eq!(refs[0].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[0].line_start, 1);
-    assert_eq!(refs[1].file_name, Path::new("test_data/hello/src/main.rs"));
-    assert_eq!(refs[1].line_start, 2);
+    assert_eq!(refs[0].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[0].range.row_start.0, 1);
+    assert_eq!(refs[1].file, Path::new("test_data/hello/src/main.rs"));
+    assert_eq!(refs[1].range.row_start.0, 2);
 }
 
 // TODO

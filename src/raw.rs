@@ -322,7 +322,7 @@ pub struct SpanData {
     pub byte_end: u32,
     pub line_start: span::Row<span::OneIndexed>,
     pub line_end: span::Row<span::OneIndexed>,
-    // character offset.
+    // Character offset.
     pub column_start: span::Column<span::OneIndexed>,
     pub column_end: span::Column<span::OneIndexed>,
 }
