@@ -152,13 +152,17 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     pub fn reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
-        if self.loader.needs_hard_reload(path_prefix) {
+        let empty = {
+            let a = self.analysis.lock().map_err(|_| ())?;
+            a.is_none()
+        };
+        if empty || self.loader.needs_hard_reload(path_prefix) {
             return self.hard_reload(path_prefix, full_docs);
         }
 
-        let timestamps = match &*self.analysis.lock().map_err(|_| ())? {
-            &Some(ref a) => a.timestamps(),
-            &None => HashMap::new(),
+        let timestamps = {
+            let a = self.analysis.lock().map_err(|_| ())?;
+            a.as_ref().unwrap().timestamps()
         };
 
         let raw_analysis = raw::Analysis::read_incremental(&self.loader, timestamps);
