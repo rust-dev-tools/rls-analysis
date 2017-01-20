@@ -111,3 +111,31 @@ fn test_hello() {
 // TODO
 // check span functions
 // check complex programs
+
+#[test]
+fn test_types() {
+    // TODO test unit structs, structs with fields, enums, aliases, traits, etc.
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(Path::new("test_data/types/save-analysis").to_owned()));
+    host.reload(Path::new("test_data/types"), false).unwrap();
+
+    let ids = host.search_for_id("Foo").unwrap();
+    assert_eq!(ids.len(), 1);
+    let id = ids[0];
+    let def = host.get_def(id).unwrap();
+    assert_eq!(def.name, "Foo");
+    assert_eq!(def.kind, DefKind::Struct);
+
+    let refs = host.find_all_refs_by_id(id).unwrap();
+    println!("{:?}", refs);
+    assert_eq!(refs.len(), 5);
+    assert_eq!(refs[0].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(refs[0].range.row_start.0, 0);
+    assert_eq!(refs[1].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(refs[1].range.row_start.0, 5);
+    assert_eq!(refs[2].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(refs[2].range.row_start.0, 6);
+    assert_eq!(refs[3].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(refs[3].range.row_start.0, 9);
+    assert_eq!(refs[4].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(refs[4].range.row_start.0, 9);
+}

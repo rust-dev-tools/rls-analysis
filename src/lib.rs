@@ -8,7 +8,6 @@
 
 #![feature(const_fn)]
 #![feature(type_ascription)]
-#![feature(proc_macro)]
 
 extern crate rustc_serialize;
 extern crate serde;
