@@ -79,10 +79,9 @@ impl CrateReader {
                     project_dir: &Path,
                     full_docs: bool)
                     -> CrateReader {
-        let crate_name = prelude.crate_name.clone();
         // println!("building crate map for {}", crate_name);
         let next = master_crate_map.len() as u32;
-        let mut crate_map = vec![*master_crate_map.entry(crate_name.clone()).or_insert_with(|| next)];
+        let mut crate_map = vec![*master_crate_map.entry(prelude.crate_name.clone()).or_insert_with(|| next)];
         // println!("  {} -> {}", crate_name, master_crate_map[&crate_name]);
 
         prelude.external_crates.sort_by(|a, b| a.num.cmp(&b.num));
@@ -96,7 +95,7 @@ impl CrateReader {
         CrateReader {
             crate_map: crate_map,
             project_dir: project_dir.to_owned(),
-            crate_name: crate_name,
+            crate_name: prelude.crate_name,
             full_docs: full_docs,
         }
     }

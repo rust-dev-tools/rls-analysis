@@ -17,6 +17,9 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 extern crate rls_span as span;
+#[cfg(test)]
+#[macro_use]
+extern crate derive_new;
 
 pub mod raw;
 mod lowering;
