@@ -16,9 +16,10 @@ extern crate serde_json;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
+extern crate rls_span as span;
+#[cfg(test)]
 #[macro_use]
 extern crate derive_new;
-extern crate rls_span as span;
 
 pub mod raw;
 mod lowering;
@@ -93,7 +94,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
 
     fn abs_path_prefix(&self) -> Option<PathBuf> {
         let p = self.path_prefix.lock().unwrap();
-        p.as_ref().map(|ref s| Path::new(s).canonicalize().unwrap().to_owned())
+        p.as_ref().map(|s| Path::new(s).canonicalize().unwrap().to_owned())
     }
 
     fn iter_paths<F, T>(&self, f: F) -> Vec<T>
@@ -117,14 +118,16 @@ impl AnalysisLoader for CargoAnalysisLoader {
 
 fn sys_root_path() -> PathBuf {
     option_env!("SYSROOT")
-        .map(|s| PathBuf::from(s))
-        .or(Command::new("rustc")
+        .map(PathBuf::from)
+        .or_else(|| {
+            Command::new("rustc")
             .arg("--print")
             .arg("sysroot")
             .output()
             .ok()
             .and_then(|out| String::from_utf8(out.stdout).ok())
-            .map(|s| PathBuf::from(s.trim())))
+            .map(|s| PathBuf::from(s.trim()))
+        })
         .expect("need to specify SYSROOT env var, \
                  or rustc must be in PATH")
 }
@@ -181,9 +184,9 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.
-        let mut foo = self.loader.fresh_host();
-        foo.analysis = Mutex::new(Some(Analysis::new()));
-        let lowering_result = lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, &mut foo, |host, per_crate, path| {
+        let mut fresh_host = self.loader.fresh_host();
+        fresh_host.analysis = Mutex::new(Some(Analysis::new()));
+        let lowering_result = lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, &fresh_host, |host, per_crate, path| {
             host.analysis.lock().unwrap().as_mut().unwrap().per_crate.insert(path, per_crate);
             Ok(())
         });
@@ -196,11 +199,11 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
         {
             let mut mcm = self.master_crate_map.lock().map_err(|_| ())?;
-            *mcm = foo.master_crate_map.into_inner().unwrap();
+            *mcm = fresh_host.master_crate_map.into_inner().unwrap();
         }
 
         let mut a = self.analysis.lock().map_err(|_| ())?;
-        *a = Some(foo.analysis.into_inner().unwrap().unwrap());
+        *a = Some(fresh_host.analysis.into_inner().unwrap().unwrap());
         Ok(())
     }
 
@@ -214,24 +217,24 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     pub fn goto_def(&self, span: &Span) -> AResult<Span> {
-        self.read(|a| {
+        self.with_analysis(|a| {
             a.def_id_for_span(span)
              .and_then(|id| def_span!(a, id))
         })
     }
 
     pub fn get_def(&self, id: u32) -> AResult<Def> {
-        self.read(|a| a.with_defs(id, |def| def.clone()))
+        self.with_analysis(|a| a.with_defs(id, |def| def.clone()))
     }
 
     pub fn for_each_child_def<F, T>(&self, id: u32, f: F) -> AResult<Vec<T>>
         where F: Fn(u32, &Def) -> T
     {
-        self.read(|a| a.for_each_child(id, f))
+        self.with_analysis(|a| a.for_each_child(id, f))
     }
 
     pub fn def_parents(&self, id: u32) -> AResult<Vec<(u32, String)>> {
-        self.read(|a| {
+        self.with_analysis(|a| {
             let mut result = vec![];
             let mut next = id;
             loop {
@@ -251,13 +254,13 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     pub fn id(&self, span: &Span) -> AResult<u32> {
-        self.read(|a| a.def_id_for_span(span))
+        self.with_analysis(|a| a.def_id_for_span(span))
     }
 
     pub fn find_all_refs(&self, span: &Span, include_decl: bool) -> AResult<Vec<Span>> {
         let t_start = Instant::now();
         let result = if include_decl {
-            self.read(|a| {
+            self.with_analysis(|a| {
                 a.def_id_for_span(span)
                  .and_then(|id| {
                     a.with_ref_spans(id, |refs| {
@@ -266,13 +269,16 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                          .chain(refs.iter().cloned())
                          .collect::<Vec<_>>()
                      })
-                     .or(def_span!(a, id).map(|s| vec![s]))
+                     .or_else(|| def_span!(a, id).map(|s| vec![s]))
                  })
             })
         } else {
-            self.read(|a| {
+            self.with_analysis(|a| {
                 a.def_id_for_span(span)
-                 .map(|id| a.with_ref_spans(id, |refs| refs.clone()).unwrap_or(vec![]))
+                 .map(|id| {
+                    a.with_ref_spans(id, |refs| refs.clone())
+                     .unwrap_or_else(Vec::new)
+                 })
             })
         };
 
@@ -282,14 +288,14 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     pub fn show_type(&self, span: &Span) -> AResult<String> {
-        self.read(|a| {
+        self.with_analysis(|a| {
             a.def_id_for_span(span)
              .and_then(|id| a.with_defs(id, clone_field!(value)))
         })
     }
 
     pub fn docs(&self, span: &Span) -> AResult<String> {
-        self.read(|a| {
+        self.with_analysis(|a| {
             a.def_id_for_span(span)
              .and_then(|id| a.with_defs(id, clone_field!(docs)))
          })
@@ -299,7 +305,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     /// for that name.
     pub fn search(&self, name: &str) -> AResult<Vec<Span>> {
         let t_start = Instant::now();
-        let result = self.read(|a| {
+        let result = self.with_analysis(|a| {
             a.with_def_names(name, |defs| {
                 println!("defs: {:?}", defs);
                 defs.into_iter()
@@ -310,8 +316,8 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                              .into_iter()
                              .chain(refs.iter().cloned())
                              .collect::<Vec<_>>()})
-                         .or(def_span!(a, *id).map(|s| vec![s]))
-                         .unwrap_or(vec![])
+                         .or_else(|| def_span!(a, *id).map(|s| vec![s]))
+                         .unwrap_or_else(Vec::new)
                          .into_iter()
                      })
                      .collect(): Vec<Span>
@@ -327,14 +333,14 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     // Includes all references and the def, the def is always first.
     pub fn find_all_refs_by_id(&self, id: u32) -> AResult<Vec<Span>> {
         let t_start = Instant::now();
-        let result = self.read(|a| {
+        let result = self.with_analysis(|a| {
             a.with_ref_spans(id, |refs| {
                 def_span!(a, id)
                  .into_iter()
                  .chain(refs.iter().cloned())
                  .collect::<Vec<_>>()
              })
-             .or(def_span!(a, id).map(|s| vec![s]))
+             .or_else(|| def_span!(a, id).map(|s| vec![s]))
         });
 
         let time = t_start.elapsed();
@@ -344,11 +350,11 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     /// Search for a symbol name, returning a list of def_ids for that name.
     pub fn search_for_id(&self, name: &str) -> AResult<Vec<u32>> {
-        self.read(|a| a.with_def_names(name, |defs| defs.clone()))
+        self.with_analysis(|a| a.with_def_names(name, |defs| defs.clone()))
     }
 
     pub fn symbols(&self, file_name: &Path) -> AResult<Vec<SymbolResult>> {
-        self.read(|a| {
+        self.with_analysis(|a| {
             a.with_defs_per_file(file_name, |ids| {
                 ids.iter()
                    .map(|id| a.with_defs(*id, |def| SymbolResult::new(*id, def)).unwrap())
@@ -359,7 +365,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     pub fn doc_url(&self, span: &Span) -> AResult<String> {
         // e.g., https://doc.rust-lang.org/nightly/std/string/String.t.html
-        self.read(|a| {
+        self.with_analysis(|a| {
             a.def_id_for_span(span)
              .and_then(|id| a.with_defs_and_then(id, |def| AnalysisHost::<L>::mk_doc_url(def, a)))
         })
@@ -371,13 +377,13 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         // FIXME would be nice not to do this every time.
         let path_prefix = &self.loader.abs_path_prefix();
 
-        self.read(|a| {
+        self.with_analysis(|a| {
             a.def_id_for_span(span)
              .and_then(|id| a.with_defs_and_then(id, |def| AnalysisHost::<L>::mk_src_url(def, path_prefix.as_ref(), a)))
         })
     }
 
-    fn read<F, T>(&self, f: F) -> AResult<T>
+    fn with_analysis<F, T>(&self, f: F) -> AResult<T>
         where F: FnOnce(&Analysis) -> Option<T>
     {
         match self.analysis.lock() {
@@ -455,7 +461,7 @@ impl SymbolResult {
             id: id,
             name: def.name.clone(),
             span: def.span.clone(),
-            kind: def.kind.clone(),
+            kind: def.kind,
         }
     }
 }
@@ -559,7 +565,7 @@ impl Analysis {
     fn for_each_crate<F, T>(&self, f: F) -> Option<T>
         where F: Fn(&PerCrateAnalysis) -> Option<T>
     {
-        for (_, ref per_crate) in self.per_crate.iter() {
+        for per_crate in self.per_crate.values() {
             if let Some(t) = f(per_crate) {
                 return Some(t);
             }
@@ -569,7 +575,7 @@ impl Analysis {
     }
 
     fn def_id_for_span(&self, span: &Span) -> Option<u32> {
-        self.for_each_crate(|c| c.def_id_for_span.get(span).map(|id| *id))
+        self.for_each_crate(|c| c.def_id_for_span.get(span).cloned())
     }
 
     fn with_defs<F, T>(&self, id: u32, f: F) -> Option<T>
@@ -587,7 +593,7 @@ impl Analysis {
     fn for_each_child<F, T>(&self, id: u32, f: F) -> Option<Vec<T>>
         where F: Fn(u32, &Def) -> T
     {
-        for (_, ref per_crate) in self.per_crate.iter() {
+        for per_crate in self.per_crate.values() {
             if let Some(children) = per_crate.children.get(&id) {
                 return Some(children.iter().map(|id| f(*id, &per_crate.defs[id])).collect());
             }

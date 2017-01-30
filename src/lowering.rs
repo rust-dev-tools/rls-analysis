@@ -27,7 +27,7 @@ pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_doc
     let rss = util::get_resident().unwrap_or(0);
     let t_start = Instant::now();
 
-    for c in raw_analysis.into_iter() {
+    for c in raw_analysis {
         let t_start = Instant::now();
 
         let (per_crate, path) = CrateReader::read_crate(analysis, c, &project_dir, full_docs);
@@ -79,10 +79,9 @@ impl CrateReader {
                     project_dir: &Path,
                     full_docs: bool)
                     -> CrateReader {
-        let crate_name = prelude.crate_name.clone();
         // println!("building crate map for {}", crate_name);
         let next = master_crate_map.len() as u32;
-        let mut crate_map = vec![*master_crate_map.entry(crate_name.clone()).or_insert_with(|| next)];
+        let mut crate_map = vec![*master_crate_map.entry(prelude.crate_name.clone()).or_insert_with(|| next)];
         // println!("  {} -> {}", crate_name, master_crate_map[&crate_name]);
 
         prelude.external_crates.sort_by(|a, b| a.num.cmp(&b.num));
@@ -96,7 +95,7 @@ impl CrateReader {
         CrateReader {
             crate_map: crate_map,
             project_dir: project_dir.to_owned(),
-            crate_name: crate_name,
+            crate_name: prelude.crate_name,
             full_docs: full_docs,
         }
     }
@@ -175,7 +174,8 @@ impl CrateReader {
                 }
                 if let Some(children) = d.children {
                     if !children.is_empty() {
-                        analysis.children.entry(id).or_insert_with(|| vec![]).extend(children.iter().map(|id| self.id_from_compiler_id(&id)));
+                        let children_for_id = analysis.children.entry(id).or_insert_with(Vec::new);
+                        children_for_id.extend(children.iter().map(|id| self.id_from_compiler_id(id)));
                     }
                 }
 
@@ -202,7 +202,7 @@ impl CrateReader {
         // We must now run a pass over the defs setting parents, because save-analysis often omits parent info
         for (parent, children) in &analysis.children {
             for c in children {
-                analysis.defs.get_mut(&c).map(|def| def.parent = Some(*parent));
+                analysis.defs.get_mut(c).map(|def| def.parent = Some(*parent));
             }
         }
     }

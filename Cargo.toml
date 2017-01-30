@@ -9,5 +9,7 @@ serde = "0.8"
 serde_json = "0.8"
 serde_derive = "0.8"
 log = "0.3"
-derive-new = "0.3"
 rls-span = { git = "https://github.com/nrc/rls-span" }
+
+[dev-dependencies]
+derive-new = "0.3"

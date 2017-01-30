@@ -94,14 +94,14 @@ impl Analysis {
                     match timestamps.get(&path) {
                         Some(&Some(ref t)) => {
                             if time > t {
-                                Self::read_crate_data(&path).map(|a| result.push(Crate::new(a, time.clone(), path)));
+                                Self::read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, path)));
                             }
                         }
                         // A crate we should never need to refresh.
                         Some(&None) => {}
                         // A crate we've never seen before.
                         None => {
-                            Self::read_crate_data(&path).map(|a| result.push(Crate::new(a, time.clone(), path)));
+                            Self::read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, path)));
                         }
                     }
                 }
@@ -110,7 +110,7 @@ impl Analysis {
             let _d = t.elapsed();
             // println!("reading {} crates from {} in {}.{:09}s", result.len(), p.display(), _d.as_secs(), _d.subsec_nanos());
 
-            return result;
+            result
         })
     }
 
