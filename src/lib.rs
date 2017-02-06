@@ -43,7 +43,7 @@ pub struct AnalysisHost<L: AnalysisLoader = CargoAnalysisLoader> {
 
 pub struct CargoAnalysisLoader {
     path_prefix: Mutex<Option<PathBuf>>,
-    target: Target,    
+    target: Target,
 }
 
 pub type AResult<T> = Result<T, ()>;
@@ -107,13 +107,33 @@ impl AnalysisLoader for CargoAnalysisLoader {
         // TODO deps path allows to break out of 'sandbox' - is that Ok?
         let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
         let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
-        let libs_path = sys_root_path().join("lib").join("save-analysis");
+        let libs_path = sys_root_path()
+            .join("lib")
+            .join("rustlib")
+            .join(&host_triple())
+            .join("analysis");
         let paths = &[&libs_path,
                       &deps_path,
                       &principle_path];
 
         paths.iter().flat_map(|p| f(p).into_iter()).collect()
     }
+}
+
+fn host_triple() -> String {
+    let output = Command::new("rustc")
+        .arg("-v") // Version
+        .arg("-V") // Verbose
+        .output()
+        .ok()
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .expect("rustc invocation failed");
+    let line = output
+        .lines()
+        .find(|l| l.starts_with("host: "))
+        .expect("didn't find a line for the host");
+    let triple = line.trim_left_matches("host: ");
+    String::from(triple)
 }
 
 fn sys_root_path() -> PathBuf {
@@ -142,7 +162,7 @@ impl AnalysisHost<CargoAnalysisLoader> {
                 target: target,
             }
         }
-    }    
+    }
 }
 
 impl<L: AnalysisLoader> AnalysisHost<L> {
@@ -413,7 +433,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                 analysis.with_defs(p, |parent| {
                     let parent_qualpath = parent.qualname.replace("::", "/");
                     let ns = def.kind.name_space();
-                    format!("{}/{}.t.html#{}.{}", analysis.doc_url_base, parent_qualpath, def.name, ns)                    
+                    format!("{}/{}.t.html#{}.{}", analysis.doc_url_base, parent_qualpath, def.name, ns)
                 })
             }
             None => {
@@ -537,7 +557,7 @@ impl PerCrateAnalysis {
             globs: HashMap::new(),
             timestamp: None,
         }
-    }    
+    }
 }
 
 impl Analysis {
