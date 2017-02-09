@@ -204,7 +204,7 @@ impl DefKind {
 
 // Custom impl to read rustc_serialize's format.
 impl Deserialize for DefKind {
-    fn deserialize<D>(deserializer: &mut D) -> Result<DefKind, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<DefKind, D::Error>
         where D: serde::Deserializer,
     {
         let s = String::deserialize(deserializer)?;
@@ -263,7 +263,7 @@ pub enum RefKind {
 
 // Custom impl to read rustc_serialize's format.
 impl Deserialize for RefKind {
-    fn deserialize<D>(deserializer: &mut D) -> Result<RefKind, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<RefKind, D::Error>
         where D: serde::Deserializer,
     {
         let s = String::deserialize(deserializer)?;
@@ -302,7 +302,7 @@ pub enum ImportKind {
 
 // Custom impl to read rustc_serialize's format.
 impl Deserialize for ImportKind {
-    fn deserialize<D>(deserializer: &mut D) -> Result<ImportKind, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<ImportKind, D::Error>
         where D: serde::Deserializer,
     {
         let s = String::deserialize(deserializer)?;
