@@ -5,9 +5,9 @@ authors = ["Nick Cameron <ncameron@mozilla.com>"]
 
 [dependencies]
 rustc-serialize = "0.3"
-serde = "0.8"
-serde_json = "0.8"
-serde_derive = "0.8"
+serde = "0.9"
+serde_json = "0.9"
+serde_derive = "0.9"
 log = "0.3"
 rls-span = { git = "https://github.com/nrc/rls-span" }
 
