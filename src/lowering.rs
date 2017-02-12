@@ -166,8 +166,8 @@ impl CrateReader {
                     analysis.defs_per_file.entry(file_name).or_insert_with(|| vec![]).push(id);
 
                     analysis.def_id_for_span.insert(span.clone(), id);
-                    analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
                 }
+                analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
                 let parent = d.parent.map(|id| self.id_from_compiler_id(&id));
                 if let Some(parent) = parent {
                     analysis.children.entry(parent).or_insert_with(|| vec![]).push(id);
