@@ -169,6 +169,7 @@ pub enum DefKind {
     Enum,
     Tuple,
     Struct,
+    Union,
     Trait,
     Function,
     Method,
@@ -188,6 +189,7 @@ impl DefKind {
             DefKind::Enum |
             DefKind::Tuple |
             DefKind::Struct |
+            DefKind::Union |
             DefKind::Type |
             DefKind::Trait => 't',
             DefKind::Function |
@@ -213,6 +215,7 @@ impl Deserialize for DefKind {
             "Enum" => Ok(DefKind::Enum),
             "Tuple" => Ok(DefKind::Tuple),
             "Struct" => Ok(DefKind::Struct),
+            "Union" => Ok(DefKind::Union),
             "Trait" => Ok(DefKind::Trait),
             "Function" => Ok(DefKind::Function),
             "Method" => Ok(DefKind::Method),

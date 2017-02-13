@@ -216,15 +216,15 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         }
     }
 
+    pub fn get_def(&self, id: u32) -> AResult<Def> {
+        self.with_analysis(|a| a.with_defs(id, |def| def.clone()))
+    }
+
     pub fn goto_def(&self, span: &Span) -> AResult<Span> {
         self.with_analysis(|a| {
             a.def_id_for_span(span)
              .and_then(|id| def_span!(a, id))
         })
-    }
-
-    pub fn get_def(&self, id: u32) -> AResult<Def> {
-        self.with_analysis(|a| a.with_defs(id, |def| def.clone()))
     }
 
     pub fn for_each_child_def<F, T>(&self, id: u32, f: F) -> AResult<Vec<T>>
