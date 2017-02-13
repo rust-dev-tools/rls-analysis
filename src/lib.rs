@@ -306,8 +306,8 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     pub fn search(&self, name: &str) -> AResult<Vec<Span>> {
         let t_start = Instant::now();
         let result = self.with_analysis(|a| {
-            a.with_def_names(name, |defs| {
-                println!("defs: {:?}", defs);
+            Some(a.with_def_names(name, |defs| {
+                info!("defs: {:?}", defs);
                 defs.into_iter()
                     .flat_map(|id| {
                         a.with_ref_spans(*id, |refs|
@@ -321,7 +321,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                          .into_iter()
                      })
                      .collect(): Vec<Span>
-             })
+             }))
         });
 
         let time = t_start.elapsed();
@@ -350,7 +350,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     /// Search for a symbol name, returning a list of def_ids for that name.
     pub fn search_for_id(&self, name: &str) -> AResult<Vec<u32>> {
-        self.with_analysis(|a| a.with_def_names(name, |defs| defs.clone()))
+        self.with_analysis(|a| Some(a.with_def_names(name, |defs| defs.clone())))
     }
 
     pub fn symbols(&self, file_name: &Path) -> AResult<Vec<SymbolResult>> {
@@ -574,6 +574,19 @@ impl Analysis {
         None
     }
 
+    fn for_all_crates<F, T>(&self, f: F) -> Vec<T>
+        where F: Fn(&PerCrateAnalysis) -> Option<Vec<T>>
+    {
+        let mut result = vec![];
+        for per_crate in self.per_crate.values() {
+            if let Some(this_crate) = f(per_crate) {
+                result.extend(this_crate);
+            }
+        }
+
+        result
+    }
+
     fn def_id_for_span(&self, span: &Span) -> Option<u32> {
         self.for_each_crate(|c| c.def_id_for_span.get(span).cloned())
     }
@@ -614,10 +627,10 @@ impl Analysis {
         self.for_each_crate(|c| c.defs_per_file.get(file).map(&f))
     }
 
-    fn with_def_names<F, T>(&self, name: &str, f: F) -> Option<T>
-        where F: Fn(&Vec<u32>) -> T
+    fn with_def_names<F, T>(&self, name: &str, f: F) -> Vec<T>
+        where F: Fn(&Vec<u32>) -> Vec<T>
     {
-        self.for_each_crate(|c| c.def_names.get(name).map(&f))
+        self.for_all_crates(|c| c.def_names.get(name).map(&f))
     }
 }
 
