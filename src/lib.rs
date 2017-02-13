@@ -348,6 +348,10 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         result
     }
 
+    pub fn find_impls(&self, id: u32) -> AResult<Vec<Span>> {
+        self.with_analysis(|a| Some(a.for_all_crates(|c| c.impls.get(&id).map(|v| v.clone()))))
+    }
+
     /// Search for a symbol name, returning a list of def_ids for that name.
     pub fn search_for_id(&self, name: &str) -> AResult<Vec<u32>> {
         self.with_analysis(|a| Some(a.with_def_names(name, |defs| defs.clone())))
@@ -486,6 +490,7 @@ pub struct PerCrateAnalysis {
     def_names: HashMap<String, Vec<u32>>,
     ref_spans: HashMap<u32, Vec<Span>>,
     globs: HashMap<Span, Glob>,
+    impls: HashMap<u32, Vec<Span>>,
 
     timestamp: Option<SystemTime>,
 }
@@ -535,6 +540,7 @@ impl PerCrateAnalysis {
             def_names: HashMap::new(),
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
+            impls: HashMap::new(),
             timestamp: None,
         }
     }    

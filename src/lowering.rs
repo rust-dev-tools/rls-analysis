@@ -8,7 +8,7 @@
 
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
-use super::raw::{self, Format};
+use super::raw::{self, Format, RelationKind};
 use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement};
 use util;
 
@@ -122,6 +122,7 @@ impl CrateReader {
         reader.read_defs(krate.analysis.defs, &mut per_crate, api_crate);
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
+        reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
 
         (per_crate, krate.path)
     }
@@ -216,6 +217,29 @@ impl CrateReader {
                     trace!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, def_id);
                     analysis.def_id_for_span.insert(span.clone(), def_id);
                     analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
+                }
+            }
+        }
+    }
+
+    fn read_impls<L: AnalysisLoader>(&self, relations: Vec<raw::Relation>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>) {
+        for r in relations {
+            if r.kind != RelationKind::Impl {
+                continue;
+            }
+            let self_id = self.id_from_compiler_id(&r.from);
+            let trait_id = self.id_from_compiler_id(&r.to);
+            let span = lower_span(&r.span, Some(&self.project_dir));
+            if self_id != NULL {
+                if let Some(self_id) = abs_ref_id(self_id, analysis, project_analysis) {
+                    trace!("record impl for self type {:?} {}", span, self_id);
+                    analysis.impls.entry(self_id).or_insert_with(|| vec![]).push(span.clone());
+                }
+            }
+            if trait_id != NULL {
+                if let Some(trait_id) = abs_ref_id(trait_id, analysis, project_analysis) {
+                    trace!("record impl for trait {:?} {}", span, trait_id);
+                    analysis.impls.entry(trait_id).or_insert_with(|| vec![]).push(span);
                 }
             }
         }

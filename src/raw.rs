@@ -29,6 +29,7 @@ pub struct Analysis {
     pub defs: Vec<Def>,
     pub refs: Vec<Ref>,
     pub macro_refs: Vec<MacroRef>,
+    pub relations: Vec<Relation>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -311,6 +312,34 @@ impl Deserialize for ImportKind {
             "Use" => Ok(ImportKind::Use),
             "GlobUse" => Ok(ImportKind::GlobUse),
             _ => Err(serde::de::Error::custom("unexpected import kind")),
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Relation {
+    pub span: SpanData,
+    pub kind: RelationKind,
+    pub from: CompilerId,
+    pub to: CompilerId,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum RelationKind {
+    Impl,
+    SuperTrait,
+}
+
+// Custom impl to read rustc_serialize's format.
+impl Deserialize for RelationKind {
+    fn deserialize<D>(deserializer: D) -> Result<RelationKind, D::Error>
+        where D: serde::Deserializer,
+    {
+        let s = String::deserialize(deserializer)?;
+        match &*s {
+            "Impl" => Ok(RelationKind::Impl),
+            "SuperTrait" => Ok(RelationKind::SuperTrait),
+            _ => Err(serde::de::Error::custom("unexpected relation kind")),
         }
     }
 }
