@@ -125,7 +125,11 @@ impl Analysis {
         let mut file = File::open(&path).unwrap();
         let mut buf = String::new();
         file.read_to_string(&mut buf).unwrap();
-        serde_json::from_str(&buf).ok()
+        let s = serde_json::from_str(&buf);
+        if let Err(ref e) = s {
+            info!("serde error: {:?}", e);
+        }
+        s.ok()
     }
 }
 
