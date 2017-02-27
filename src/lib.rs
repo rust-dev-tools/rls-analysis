@@ -30,6 +30,7 @@ mod test;
 
 pub use self::raw::Target;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
@@ -107,10 +108,12 @@ impl AnalysisLoader for CargoAnalysisLoader {
         // TODO deps path allows to break out of 'sandbox' - is that Ok?
         let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
         let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
-        let libs_path = sys_root_path()
+        let sys_root_path = sys_root_path();
+        let target_triple = extract_target_triple(sys_root_path.as_path());
+        let libs_path = sys_root_path
             .join("lib")
             .join("rustlib")
-            .join(&host_triple())
+            .join(&target_triple)
             .join("analysis");
         let paths = &[&libs_path,
                       &deps_path,
@@ -120,20 +123,18 @@ impl AnalysisLoader for CargoAnalysisLoader {
     }
 }
 
-fn host_triple() -> String {
-    let output = Command::new("rustc")
-        .arg("-v") // Version
-        .arg("-V") // Verbose
-        .output()
-        .ok()
-        .and_then(|out| String::from_utf8(out.stdout).ok())
-        .expect("rustc invocation failed");
-    let line = output
-        .lines()
-        .find(|l| l.starts_with("host: "))
-        .expect("didn't find a line for the host");
-    let triple = line.trim_left_matches("host: ");
-    String::from(triple)
+fn extract_target_triple(sys_root_path: &Path) -> String {
+    // Extracts nightly-x86_64-pc-windows-msvc from $HOME/.rustup/toolchains/nightly-x86_64-pc-windows-msvc
+    let toolchain = sys_root_path.iter()
+                                 .last()
+                                 .and_then(OsStr::to_str)
+                                 .expect("extracting toolchain failed");
+    // Extracts x86_64-pc-windows-msvc from nightly-x86_64-pc-windows-pc
+    let triple = toolchain.splitn(2, "-")
+                          .last()
+                          .map(String::from)
+                          .expect("extracting triple failed");
+    triple
 }
 
 fn sys_root_path() -> PathBuf {
@@ -643,3 +644,22 @@ impl Analysis {
 
 // Used to indicate a missing index in the Id.
 const NULL: u32 = u32::max_value();
+
+#[cfg(test)]
+mod tests {
+    mod extract_target_triple {
+        use std::path::Path;
+
+        #[test]
+        fn windows_path() {
+            let path = Path::new(r#"C:\Users\Alexey\.rustup\toolchains\nightly-x86_64-pc-windows-msvc"#);
+            assert_eq!(::extract_target_triple(path), String::from("x86_64-pc-windows-msvc"));
+        }
+
+        #[test]
+        fn unix_path() {
+            let path = Path::new("/home/owl/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu");
+            assert_eq!(::extract_target_triple(path), String::from("x86_64-unknown-linux-gnu"));
+        }
+    }
+}
