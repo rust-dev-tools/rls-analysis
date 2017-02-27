@@ -30,6 +30,7 @@ mod test;
 
 pub use self::raw::Target;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
@@ -43,7 +44,7 @@ pub struct AnalysisHost<L: AnalysisLoader = CargoAnalysisLoader> {
 
 pub struct CargoAnalysisLoader {
     path_prefix: Mutex<Option<PathBuf>>,
-    target: Target,    
+    target: Target,
 }
 
 pub type AResult<T> = Result<T, ()>;
@@ -107,13 +108,33 @@ impl AnalysisLoader for CargoAnalysisLoader {
         // TODO deps path allows to break out of 'sandbox' - is that Ok?
         let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
         let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
-        let libs_path = sys_root_path().join("lib").join("save-analysis");
+        let sys_root_path = sys_root_path();
+        let target_triple = extract_target_triple(sys_root_path.as_path());
+        let libs_path = sys_root_path
+            .join("lib")
+            .join("rustlib")
+            .join(&target_triple)
+            .join("analysis");
         let paths = &[&libs_path,
                       &deps_path,
                       &principle_path];
 
         paths.iter().flat_map(|p| f(p).into_iter()).collect()
     }
+}
+
+fn extract_target_triple(sys_root_path: &Path) -> String {
+    // Extracts nightly-x86_64-pc-windows-msvc from $HOME/.rustup/toolchains/nightly-x86_64-pc-windows-msvc
+    let toolchain = sys_root_path.iter()
+                                 .last()
+                                 .and_then(OsStr::to_str)
+                                 .expect("extracting toolchain failed");
+    // Extracts x86_64-pc-windows-msvc from nightly-x86_64-pc-windows-pc
+    let triple = toolchain.splitn(2, "-")
+                          .last()
+                          .map(String::from)
+                          .expect("extracting triple failed");
+    triple
 }
 
 fn sys_root_path() -> PathBuf {
@@ -142,7 +163,7 @@ impl AnalysisHost<CargoAnalysisLoader> {
                 target: target,
             }
         }
-    }    
+    }
 }
 
 impl<L: AnalysisLoader> AnalysisHost<L> {
@@ -417,7 +438,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                 analysis.with_defs(p, |parent| {
                     let parent_qualpath = parent.qualname.replace("::", "/");
                     let ns = def.kind.name_space();
-                    format!("{}/{}.t.html#{}.{}", analysis.doc_url_base, parent_qualpath, def.name, ns)                    
+                    format!("{}/{}.t.html#{}.{}", analysis.doc_url_base, parent_qualpath, def.name, ns)
                 })
             }
             None => {
@@ -543,7 +564,7 @@ impl PerCrateAnalysis {
             impls: HashMap::new(),
             timestamp: None,
         }
-    }    
+    }
 }
 
 impl Analysis {
@@ -642,3 +663,22 @@ impl Analysis {
 
 // Used to indicate a missing index in the Id.
 const NULL: u32 = u32::max_value();
+
+#[cfg(test)]
+mod tests {
+    mod extract_target_triple {
+        use std::path::Path;
+
+        #[test]
+        fn windows_path() {
+            let path = Path::new(r#"C:\Users\user\.rustup\toolchains\nightly-x86_64-pc-windows-msvc"#);
+            assert_eq!(::extract_target_triple(path), String::from("x86_64-pc-windows-msvc"));
+        }
+
+        #[test]
+        fn unix_path() {
+            let path = Path::new("/home/user/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu");
+            assert_eq!(::extract_target_triple(path), String::from("x86_64-unknown-linux-gnu"));
+        }
+    }
+}
