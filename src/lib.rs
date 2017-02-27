@@ -652,13 +652,13 @@ mod tests {
 
         #[test]
         fn windows_path() {
-            let path = Path::new(r#"C:\Users\Alexey\.rustup\toolchains\nightly-x86_64-pc-windows-msvc"#);
+            let path = Path::new(r#"C:\Users\user\.rustup\toolchains\nightly-x86_64-pc-windows-msvc"#);
             assert_eq!(::extract_target_triple(path), String::from("x86_64-pc-windows-msvc"));
         }
 
         #[test]
         fn unix_path() {
-            let path = Path::new("/home/owl/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu");
+            let path = Path::new("/home/user/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu");
             assert_eq!(::extract_target_triple(path), String::from("x86_64-unknown-linux-gnu"));
         }
     }
