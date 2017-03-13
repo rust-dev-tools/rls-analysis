@@ -4,6 +4,7 @@ version = "0.1.0"
 dependencies = [
  "derive-new 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rls-data 0.1.0",
  "rls-span 0.1.0 (git+https://github.com/nrc/rls-span)",
  "rustc-serialize 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 0.9.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -49,6 +50,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "quote"
 version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "rls-data"
+version = "0.1.0"
+dependencies = [
+ "rls-span 0.1.0 (git+https://github.com/nrc/rls-span)",
+ "serde 0.9.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 0.9.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "rls-span"

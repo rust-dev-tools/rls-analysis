@@ -9,17 +9,18 @@
 #![feature(const_fn)]
 #![feature(type_ascription)]
 
-extern crate rustc_serialize;
-extern crate serde;
-extern crate serde_json;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate log;
-extern crate rls_span as span;
 #[cfg(test)]
 #[macro_use]
 extern crate derive_new;
+#[macro_use]
+extern crate log;
+extern crate rls_data as data;
+extern crate rls_span as span;
+extern crate rustc_serialize;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 
 pub mod raw;
 mod lowering;
@@ -28,7 +29,8 @@ mod util;
 #[cfg(test)]
 mod test;
 
-pub use self::raw::Target;
+pub use self::raw::{Target, name_space_for_def_kind, read_analyis_incremental};
+
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -189,7 +191,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             a.as_ref().unwrap().timestamps()
         };
 
-        let raw_analysis = raw::Analysis::read_incremental(&self.loader, timestamps);
+        let raw_analysis = read_analyis_incremental(&self.loader, timestamps);
 
         lowering::lower(raw_analysis, path_prefix.to_owned(), full_docs, self, |host, per_crate, path| {
             let mut a = host.analysis.lock().map_err(|_| ())?;
@@ -201,7 +203,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     // Reloads the entire project's analysis data.
     pub fn hard_reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
         self.loader.set_path_prefix(path_prefix);
-        let raw_analysis = raw::Analysis::read_incremental(&self.loader, HashMap::new());
+        let raw_analysis = read_analyis_incremental(&self.loader, HashMap::new());
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.
@@ -437,13 +439,13 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             Some(p) => {
                 analysis.with_defs(p, |parent| {
                     let parent_qualpath = parent.qualname.replace("::", "/");
-                    let ns = def.kind.name_space();
+                    let ns = name_space_for_def_kind(def.kind);
                     format!("{}/{}.t.html#{}.{}", analysis.doc_url_base, parent_qualpath, def.name, ns)
                 })
             }
             None => {
                 let qualpath = def.qualname.replace("::", "/");
-                let ns = def.kind.name_space();
+                let ns = name_space_for_def_kind(def.kind);
                 Some(format!("{}/{}.{}.html", analysis.doc_url_base, qualpath, ns))
             }
         }

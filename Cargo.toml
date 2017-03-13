@@ -9,6 +9,7 @@ serde = "0.9"
 serde_json = "0.9"
 serde_derive = "0.9"
 log = "0.3"
+rls-data = { path = "../rls-data" }
 rls-span = { git = "https://github.com/nrc/rls-span" }
 
 [dev-dependencies]

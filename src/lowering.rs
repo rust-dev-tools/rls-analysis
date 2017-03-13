@@ -8,7 +8,8 @@
 
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
-use super::raw::{self, Format, RelationKind};
+use data;
+use raw::{self, Format, RelationKind, };
 use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement};
 use util;
 
@@ -173,11 +174,9 @@ impl CrateReader {
                 if let Some(parent) = parent {
                     analysis.children.entry(parent).or_insert_with(|| vec![]).push(id);
                 }
-                if let Some(children) = d.children {
-                    if !children.is_empty() {
-                        let children_for_id = analysis.children.entry(id).or_insert_with(Vec::new);
-                        children_for_id.extend(children.iter().map(|id| self.id_from_compiler_id(id)));
-                    }
+                if !d.children.is_empty() {
+                    let children_for_id = analysis.children.entry(id).or_insert_with(Vec::new);
+                    children_for_id.extend(d.children.iter().map(|id| self.id_from_compiler_id(id)));
                 }
 
                 let def = Def {
@@ -264,7 +263,7 @@ impl CrateReader {
         }
     }
 
-    fn id_from_compiler_id(&self, id: &raw::CompilerId) -> u32 {
+    fn id_from_compiler_id(&self, id: &data::Id) -> u32 {
         if id.krate == NULL || id.index == NULL {
             return NULL;
         }
