@@ -17,10 +17,6 @@ extern crate log;
 extern crate rls_data as data;
 extern crate rls_span as span;
 extern crate rustc_serialize;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
 
 pub mod raw;
 mod lowering;
@@ -474,7 +470,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct SymbolResult {
     pub id: u32,
     pub name: String,

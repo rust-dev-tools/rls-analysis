@@ -8,9 +8,10 @@
 
 use AnalysisLoader;
 use listings::{DirectoryListing, ListingKind};
-use serde_json;
-pub use data::{Analysis, Format, CratePreludeData, ExternalCrateData, Def, DefKind, Ref, RefKind,
-               Signature, SigElement, MacroRef, Import, ImportKind, Relation, RelationKind, SpanData};
+pub use data::{Def, DefKind, Ref, CratePreludeData, Signature, SigElement, Import, Format,
+               RelationKind, Relation, SpanData};
+use data::Analysis;
+
 
 use std::collections::HashMap;
 use std::fmt;
@@ -104,9 +105,9 @@ fn read_crate_data(path: &Path) -> Option<Analysis> {
     let mut file = File::open(&path).unwrap();
     let mut buf = String::new();
     file.read_to_string(&mut buf).unwrap();
-    let s = serde_json::from_str(&buf);
+    let s = ::rustc_serialize::json::decode(&buf);
     if let Err(ref e) = s {
-        info!("serde error: {:?}", e);
+        info!("deserialisation error: {:?}", e);
     }
     s.ok()
 }
