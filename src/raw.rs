@@ -35,20 +35,11 @@ impl fmt::Display for Target {
     }
 }
 
+#[derive(new)]
 pub struct Crate {
     pub analysis: Analysis,
     pub timestamp: SystemTime,
-    pub path: PathBuf,
-}
-
-impl Crate {
-    fn new(analysis: Analysis, timestamp: SystemTime, path: PathBuf) -> Crate {
-        Crate {
-            analysis: analysis,
-            timestamp: timestamp,
-            path: path
-        }
-    }
+    pub path: Option<PathBuf>,
 }
 
 pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
@@ -75,14 +66,14 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
                 match timestamps.get(&path) {
                     Some(&Some(ref t)) => {
                         if time > t {
-                            read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, path)));
+                            read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, Some(path))));
                         }
                     }
                     // A crate we should never need to refresh.
                     Some(&None) => {}
                     // A crate we've never seen before.
                     None => {
-                        read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, path)));
+                        read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, Some(path))));
                     }
                 }
             }

@@ -9,7 +9,6 @@
 #![feature(const_fn)]
 #![feature(type_ascription)]
 
-#[cfg(test)]
 #[macro_use]
 extern crate derive_new;
 #[macro_use]
@@ -171,6 +170,37 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             master_crate_map: Mutex::new(HashMap::new()),
             loader: l,
         }
+    }
+
+    /// Reloads given data passed in `analysis`. This will first check and read
+    /// on-disk data (just like `reload`). It then imports the data we're
+    /// passing in directly.
+    pub fn reload_from_analysis(&self,
+                                analysis: data::Analysis,
+                                path_prefix: &Path,
+                                full_docs: bool)
+                                -> AResult<()> {
+        self.reload(path_prefix, full_docs)?;
+
+        lowering::lower(vec![raw::Crate::new(analysis, SystemTime::now(), None)],
+                        path_prefix.to_owned(),
+                        full_docs,
+                        self,
+                        |host, per_crate, path| {
+            let mut a = host.analysis.lock().map_err(|_| ())?;
+            a.as_mut().unwrap().update(per_crate, path);
+            Ok(())
+        })
+
+        // TODO
+        // how to handle a hard reload? (First build we'll get on-disk files for deps, but in-mem for primary)
+        //   can just read all files + analysis
+        // reading from disk we get timestamp and path, what to do?
+        //   timestamp - use system::now()
+        //   path - used for timestamps - make optional
+        // how does invalidation work?
+        //   our Cargo callback deletes old json files before running rustc
+        //   SO, if we have analysis data, the json file won't exist :-)
     }
 
     pub fn reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
@@ -493,7 +523,10 @@ type Span = span::Span<span::ZeroIndexed>;
 
 #[derive(Debug)]
 pub struct Analysis {
-    per_crate: HashMap<PathBuf, PerCrateAnalysis>,
+    // The primary crate will have its data passed directly, not via a file, so
+    // there is no path for it. Because of this key into the hashmap, this means
+    // we can only pass the data for one crate directly.
+    per_crate: HashMap<Option<PathBuf>, PerCrateAnalysis>,
 
     pub doc_url_base: String,
     pub src_url_base: String,
@@ -576,10 +609,10 @@ impl Analysis {
     }
 
     fn timestamps(&self) -> HashMap<PathBuf, Option<SystemTime>> {
-        self.per_crate.iter().map(|(s, pc)| (s.clone(), pc.timestamp)).collect()
+        self.per_crate.iter().filter_map(|(s, pc)| s.as_ref().map(|s| (s.clone(), pc.timestamp))).collect()
     }
 
-    fn update(&mut self, per_crate: PerCrateAnalysis, path: PathBuf) {
+    fn update(&mut self, per_crate: PerCrateAnalysis, path: Option<PathBuf>) {
         self.per_crate.insert(path, per_crate);
     }
 

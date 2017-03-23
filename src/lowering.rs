@@ -22,7 +22,7 @@ use std::time::Instant;
 
 // f is a function used to record the lowered crate into analysis.
 pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_docs: bool, analysis: &AnalysisHost<L>, mut f: F) -> Result<(), ()>
-    where F: FnMut(&AnalysisHost<L>, PerCrateAnalysis, PathBuf) -> Result<(), ()>,
+    where F: FnMut(&AnalysisHost<L>, PerCrateAnalysis, Option<PathBuf>) -> Result<(), ()>,
           L: AnalysisLoader
 {
     let rss = util::get_resident().unwrap_or(0);
@@ -34,7 +34,7 @@ pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_doc
         let (per_crate, path) = CrateReader::read_crate(analysis, c, &project_dir, full_docs);
 
         let time = t_start.elapsed();
-        info!("Lowering {} in {:.2}s", path.display(), time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
+        info!("Lowering {:?} in {:.2}s", path.as_ref().map(|p| p.display().to_string()), time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
         info!("    defs:  {}", per_crate.defs.len());
         info!("    refs:  {}", per_crate.ref_spans.len());
         info!("    globs: {}", per_crate.globs.len());
@@ -57,7 +57,6 @@ pub fn lower_span(raw_span: &raw::SpanData, project_dir: Option<&Path>) -> Span 
     } else {
         project_dir.expect("Required project directory, but not supplied").join(file_name)
     };
-
 
     // Rustc uses 1-indexed rows and columns, the RLS uses 0-indexed.
     span::Span::new(raw_span.line_start.zero_indexed(),
@@ -106,7 +105,7 @@ impl CrateReader {
         krate: raw::Crate,
         project_dir: &Path,
         full_docs: bool)
-        -> (PerCrateAnalysis, PathBuf)
+        -> (PerCrateAnalysis, Option<PathBuf>)
     {
         let reader = CrateReader::from_prelude(krate.analysis.prelude.unwrap(),
                                                &mut project_analysis.master_crate_map.lock().unwrap(),
