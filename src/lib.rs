@@ -191,16 +191,6 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             a.as_mut().unwrap().update(per_crate, path);
             Ok(())
         })
-
-        // TODO
-        // how to handle a hard reload? (First build we'll get on-disk files for deps, but in-mem for primary)
-        //   can just read all files + analysis
-        // reading from disk we get timestamp and path, what to do?
-        //   timestamp - use system::now()
-        //   path - used for timestamps - make optional
-        // how does invalidation work?
-        //   our Cargo callback deletes old json files before running rustc
-        //   SO, if we have analysis data, the json file won't exist :-)
     }
 
     pub fn reload(&self, path_prefix: &Path, full_docs: bool) -> AResult<()> {
