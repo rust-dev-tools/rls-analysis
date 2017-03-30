@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 // f is a function used to record the lowered crate into analysis.
-pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_docs: bool, analysis: &AnalysisHost<L>, mut f: F) -> Result<(), ()>
+pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, base_dir: &Path, full_docs: bool, analysis: &AnalysisHost<L>, mut f: F) -> Result<(), ()>
     where F: FnMut(&AnalysisHost<L>, PerCrateAnalysis, Option<PathBuf>) -> Result<(), ()>,
           L: AnalysisLoader
 {
@@ -31,7 +31,7 @@ pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_doc
     for c in raw_analysis {
         let t_start = Instant::now();
 
-        let (per_crate, path) = CrateReader::read_crate(analysis, c, &project_dir, full_docs);
+        let (per_crate, path) = CrateReader::read_crate(analysis, c, base_dir, full_docs);
 
         let time = t_start.elapsed();
         info!("Lowering {:?} in {:.2}s", path.as_ref().map(|p| p.display().to_string()), time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
@@ -50,12 +50,12 @@ pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, project_dir: PathBuf, full_doc
     Ok(())
 }
 
-fn lower_span(raw_span: &raw::SpanData, project_dir: &Path) -> Span {
+fn lower_span(raw_span: &raw::SpanData, base_dir: &Path) -> Span {
     let file_name = &raw_span.file_name;
     let file_name = if file_name.is_absolute() {
         file_name.to_owned()
     } else {
-        project_dir.join(file_name)
+        base_dir.join(file_name)
     };
 
     // Rustc uses 1-indexed rows and columns, the RLS uses 0-indexed.
@@ -68,7 +68,7 @@ fn lower_span(raw_span: &raw::SpanData, project_dir: &Path) -> Span {
 
 struct CrateReader {
     crate_map: Vec<u32>,
-    project_dir: PathBuf,
+    base_dir: PathBuf,
     crate_name: String,
     full_docs: bool,
 }
@@ -76,7 +76,7 @@ struct CrateReader {
 impl CrateReader {
     fn from_prelude(mut prelude: raw::CratePreludeData,
                     master_crate_map: &mut HashMap<String, u32>,
-                    project_dir: &Path,
+                    base_dir: &Path,
                     full_docs: bool)
                     -> CrateReader {
         // println!("building crate map for {}", crate_name);
@@ -94,7 +94,7 @@ impl CrateReader {
 
         CrateReader {
             crate_map: crate_map,
-            project_dir: project_dir.to_owned(),
+            base_dir: base_dir.to_owned(),
             crate_name: prelude.crate_name,
             full_docs: full_docs,
         }
@@ -103,13 +103,13 @@ impl CrateReader {
     fn read_crate<L: AnalysisLoader>(
         project_analysis: &AnalysisHost<L>,
         krate: raw::Crate,
-        project_dir: &Path,
+        base_dir: &Path,
         full_docs: bool)
         -> (PerCrateAnalysis, Option<PathBuf>)
     {
         let reader = CrateReader::from_prelude(krate.analysis.prelude.unwrap(),
                                                &mut project_analysis.master_crate_map.lock().unwrap(),
-                                               project_dir,
+                                               base_dir,
                                                full_docs);
 
         let mut per_crate = PerCrateAnalysis::new();
@@ -131,7 +131,7 @@ impl CrateReader {
         &self, imports: Vec<raw::Import>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>
     ) {
         for i in imports {
-            let span = lower_span(&i.span, &self.project_dir);
+            let span = lower_span(&i.span, &self.base_dir);
             if !i.value.is_empty() {
                 // A glob import.
                 let glob = Glob {
@@ -153,7 +153,7 @@ impl CrateReader {
 
     fn read_defs(&self, defs: Vec<raw::Def>, analysis: &mut PerCrateAnalysis, api_crate: bool) {
         for mut d in defs {
-            let span = lower_span(&d.span, &self.project_dir);
+            let span = lower_span(&d.span, &self.base_dir);
             let id = self.id_from_compiler_id(&d.id);
             if id != NULL && !analysis.defs.contains_key(&id) {
                 if api_crate {
@@ -190,7 +190,7 @@ impl CrateReader {
                         Some(index) if !self.full_docs => d.docs[..index].to_owned(),
                         _ => d.docs,
                     },
-                    sig: d.sig.map(|ref s| self.lower_sig(s, &self.project_dir)),
+                    sig: d.sig.map(|ref s| self.lower_sig(s, &self.base_dir)),
                 };
                 trace!("record def: {:?}/{:?} ({}): {:?}", id, d.id, self.crate_map[d.id.krate as usize],  def);
 
@@ -209,7 +209,7 @@ impl CrateReader {
     fn read_refs<L: AnalysisLoader>(&self, refs: Vec<raw::Ref>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>) {
         for r in refs {
             let def_id = self.id_from_compiler_id(&r.ref_id);
-            let span = lower_span(&r.span, &self.project_dir);
+            let span = lower_span(&r.span, &self.base_dir);
             if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) {
                 if let Some(def_id) = abs_ref_id(def_id, analysis, project_analysis) {
                     trace!("record ref {:?} {:?} {:?} {}", r.kind, span, r.ref_id, def_id);
@@ -227,7 +227,7 @@ impl CrateReader {
             }
             let self_id = self.id_from_compiler_id(&r.from);
             let trait_id = self.id_from_compiler_id(&r.to);
-            let span = lower_span(&r.span, &self.project_dir);
+            let span = lower_span(&r.span, &self.base_dir);
             if self_id != NULL {
                 if let Some(self_id) = abs_ref_id(self_id, analysis, project_analysis) {
                     trace!("record impl for self type {:?} {}", span, self_id);
@@ -243,9 +243,9 @@ impl CrateReader {
         }
     }
 
-    fn lower_sig(&self, raw_sig: &raw::Signature, project_dir: &Path) -> Signature {
+    fn lower_sig(&self, raw_sig: &raw::Signature, base_dir: &Path) -> Signature {
         Signature {
-            span: lower_span(&raw_sig.span, project_dir),
+            span: lower_span(&raw_sig.span, base_dir),
             text: raw_sig.text.clone(),
             ident_start: raw_sig.ident_start as u32,
             ident_end: raw_sig.ident_end as u32,

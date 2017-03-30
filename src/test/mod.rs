@@ -45,14 +45,14 @@ impl AnalysisLoader for TestAnalysisLoader {
 fn smoke() {
     // Read in test data and lower it, check we don't crash.
     let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(Path::new("test_data/rls-analysis").to_owned()));
-    host.reload(Path::new("test_data/rls-analysis"), false).unwrap();
+    host.reload(Path::new("test_data/rls-analysis"), Path::new("test_data/rls-analysis"), false).unwrap();
 }
 
 #[test]
 fn test_hello() {
     // Simple program, a somewhat thorough test that we have all the defs and refs we expect.
     let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(Path::new("test_data/hello/save-analysis").to_owned()));
-    host.reload(Path::new("test_data/hello"), false).unwrap();
+    host.reload(Path::new("test_data/hello"), Path::new("test_data/hello"), false).unwrap();
 
     let ids = host.search_for_id("print_hello").unwrap();
     assert_eq!(ids.len(), 1);
@@ -116,7 +116,7 @@ fn test_hello() {
 fn test_types() {
     // TODO test unit structs, structs with fields, enums, aliases, traits, etc.
     let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(Path::new("test_data/types/save-analysis").to_owned()));
-    host.reload(Path::new("test_data/types"), false).unwrap();
+    host.reload(Path::new("test_data/types"), Path::new("test_data/types"), false).unwrap();
 
     let ids = host.search_for_id("Foo").unwrap();
     assert_eq!(ids.len(), 1);
