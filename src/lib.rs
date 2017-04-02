@@ -195,6 +195,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     pub fn reload(&self, path_prefix: &Path, base_dir: &Path, full_docs: bool) -> AResult<()> {
+        info!("reload {:?} {:?}", path_prefix, base_dir);
         let empty = {
             let a = self.analysis.lock().map_err(|_| ())?;
             a.is_none()
@@ -438,7 +439,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                     Err(())
                 }
             }
-            _ => Err(())
+            _ => Err(()),
         }
     }
 
