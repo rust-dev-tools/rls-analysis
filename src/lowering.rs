@@ -267,10 +267,20 @@ impl CrateReader {
             return NULL;
         }
         // We build an id by looking up the local crate number into a global crate number and using
-        // that for the 8 high order bits, and use the least significant 24 bits of the index part
-        // of the def index as the low order bits.
+        // that for the 8 high order bits, then use the index for the least significant 24 bits.
+        // The index of a DefId can either count from the top or bottom, therefore it is common to
+        // find indexes which won't fit in 24 bits. We attempt to fit everything into 24 bits by
+        // squishing the ranges.
+
         let krate = self.crate_map[id.krate as usize] as u32;
-        let crate_local = id.index & 0x00ffffff;
+
+        let crate_local = if id.index >= (1 << 31) {
+            let d = id.index & !(1 << 31);
+            d + (1 << 23)
+        } else {
+            id.index
+        };
+
         krate << 24 | crate_local
     }
 }
