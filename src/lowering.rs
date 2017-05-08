@@ -137,13 +137,14 @@ impl CrateReader {
                 let glob = Glob {
                     value: i.value,
                 };
+                // println!("record glob {:?} {:?}", span, glob);
                 analysis.globs.insert(span, glob);
             } else if let Some(ref ref_id) = i.ref_id {
                 // Import where we know the referred def.
                 let def_id = self.id_from_compiler_id(ref_id);
                 if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) &&
                    (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id)) {
-                    //println!("record import ref {:?} {:?} {:?} {}", i, span, ref_id, def_id);
+                    // println!("record import ref {:?} {:?} {:?} {}", i, span, ref_id, def_id);
                     analysis.def_id_for_span.insert(span.clone(), def_id);
                     analysis.ref_spans.entry(def_id).or_insert_with(|| vec![]).push(span);
                 }

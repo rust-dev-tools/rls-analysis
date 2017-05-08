@@ -332,6 +332,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         self.with_analysis(|a| {
             a.def_id_for_span(span)
              .and_then(|id| a.with_defs(id, clone_field!(value)))
+             .or_else(|| a.with_globs(span, clone_field!(value)))
         })
     }
 
@@ -651,6 +652,12 @@ impl Analysis {
         where F: Fn(&Def) -> Option<T>
     {
         self.for_each_crate(|c| c.defs.get(&id).and_then(&f))
+    }
+
+    fn with_globs<F, T>(&self, span: &Span, f: F) -> Option<T>
+        where F: Fn(&Glob) -> T
+    {
+        self.for_each_crate(|c| c.globs.get(span).map(&f))
     }
 
     fn for_each_child<F, T>(&self, id: u32, f: F) -> Option<Vec<T>>
