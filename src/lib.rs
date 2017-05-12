@@ -294,6 +294,16 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         })
     }
 
+    /// Returns the name of each crate in the program and the id of the root
+    /// module of that crate.
+    pub fn def_roots(&self) -> AResult<Vec<(u32, String)>> {
+        self.with_analysis(|a| {
+            Some(a.for_all_crates(|c| c.root_id.map(|id| {
+                vec![(id, c.name.clone())]
+            })))
+        })
+    }
+
     pub fn id(&self, span: &Span) -> AResult<u32> {
         self.with_analysis(|a| a.def_id_for_span(span))
     }
@@ -537,6 +547,8 @@ pub struct PerCrateAnalysis {
     globs: HashMap<Span, Glob>,
     impls: HashMap<u32, Vec<Span>>,
 
+    name: String,
+    root_id: Option<u32>,
     timestamp: Option<SystemTime>,
 }
 
@@ -586,6 +598,8 @@ impl PerCrateAnalysis {
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
             impls: HashMap::new(),
+            name: String::new(),
+            root_id: None,
             timestamp: None,
         }
     }

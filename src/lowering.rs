@@ -124,6 +124,8 @@ impl CrateReader {
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
         reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
 
+        per_crate.name = reader.crate_name;
+
         (per_crate, krate.path)
     }
 
@@ -194,6 +196,11 @@ impl CrateReader {
                     sig: d.sig.map(|ref s| self.lower_sig(s, &self.base_dir)),
                 };
                 trace!("record def: {:?}/{:?} ({}): {:?}", id, d.id, self.crate_map[d.id.krate as usize],  def);
+
+                if d.kind == super::raw::DefKind::Mod && def.name == "" {
+                    assert!(analysis.root_id.is_none());
+                    analysis.root_id = Some(id);
+                }
 
                 analysis.defs.insert(id, def);
             }
