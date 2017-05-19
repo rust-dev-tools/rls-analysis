@@ -250,14 +250,14 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     /// Note that self.has_def == true =/> self.goto_def.is_some(), since if the
     /// def is in an api crate, there is no reasonable span to jump to.
-    pub fn has_def(&self, id: u32) -> bool {
+    pub fn has_def(&self, id: Id) -> bool {
         match self.analysis.lock() {
             Ok(a) => a.as_ref().unwrap().has_def(id),
             _ => false,
         }
     }
 
-    pub fn get_def(&self, id: u32) -> AResult<Def> {
+    pub fn get_def(&self, id: Id) -> AResult<Def> {
         self.with_analysis(|a| a.with_defs(id, |def| def.clone()))
     }
 
@@ -268,13 +268,13 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         })
     }
 
-    pub fn for_each_child_def<F, T>(&self, id: u32, f: F) -> AResult<Vec<T>>
-        where F: FnMut(u32, &Def) -> T
+    pub fn for_each_child_def<F, T>(&self, id: Id, f: F) -> AResult<Vec<T>>
+        where F: FnMut(Id, &Def) -> T
     {
         self.with_analysis(|a| a.for_each_child(id, f))
     }
 
-    pub fn def_parents(&self, id: u32) -> AResult<Vec<(u32, String)>> {
+    pub fn def_parents(&self, id: Id) -> AResult<Vec<(Id, String)>> {
         self.with_analysis(|a| {
             let mut result = vec![];
             let mut next = id;
@@ -296,7 +296,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     /// Returns the name of each crate in the program and the id of the root
     /// module of that crate.
-    pub fn def_roots(&self) -> AResult<Vec<(u32, String)>> {
+    pub fn def_roots(&self) -> AResult<Vec<(Id, String)>> {
         self.with_analysis(|a| {
             Some(a.for_all_crates(|c| c.root_id.map(|id| {
                 vec![(id, c.name.clone())]
@@ -304,7 +304,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         })
     }
 
-    pub fn id(&self, span: &Span) -> AResult<u32> {
+    pub fn id(&self, span: &Span) -> AResult<Id> {
         self.with_analysis(|a| a.def_id_for_span(span))
     }
 
@@ -383,7 +383,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     // TODO refactor search and find_all_refs to use this
     // Includes all references and the def, the def is always first.
-    pub fn find_all_refs_by_id(&self, id: u32) -> AResult<Vec<Span>> {
+    pub fn find_all_refs_by_id(&self, id: Id) -> AResult<Vec<Span>> {
         let t_start = Instant::now();
         let result = self.with_analysis(|a| {
             a.with_ref_spans(id, |refs| {
@@ -400,12 +400,12 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         result
     }
 
-    pub fn find_impls(&self, id: u32) -> AResult<Vec<Span>> {
+    pub fn find_impls(&self, id: Id) -> AResult<Vec<Span>> {
         self.with_analysis(|a| Some(a.for_all_crates(|c| c.impls.get(&id).map(|v| v.clone()))))
     }
 
     /// Search for a symbol name, returning a list of def_ids for that name.
-    pub fn search_for_id(&self, name: &str) -> AResult<Vec<u32>> {
+    pub fn search_for_id(&self, name: &str) -> AResult<Vec<Id>> {
         self.with_analysis(|a| Some(a.with_def_names(name, |defs| defs.clone())))
     }
 
@@ -505,14 +505,14 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
 #[derive(Debug, Clone)]
 pub struct SymbolResult {
-    pub id: u32,
+    pub id: Id,
     pub name: String,
     pub kind: raw::DefKind,
     pub span: Span,
 }
 
 impl SymbolResult {
-    fn new(id: u32, def: &Def) -> SymbolResult {
+    fn new(id: Id, def: &Def) -> SymbolResult {
         SymbolResult {
             id: id,
             name: def.name.clone(),
@@ -538,17 +538,17 @@ pub struct Analysis {
 #[derive(Debug)]
 pub struct PerCrateAnalysis {
     // Map span to id of def (either because it is the span of the def, or of the def for the ref).
-    def_id_for_span: HashMap<Span, u32>,
-    defs: HashMap<u32, Def>,
-    defs_per_file: HashMap<PathBuf, Vec<u32>>,
-    children: HashMap<u32, Vec<u32>>,
-    def_names: HashMap<String, Vec<u32>>,
-    ref_spans: HashMap<u32, Vec<Span>>,
+    def_id_for_span: HashMap<Span, Id>,
+    defs: HashMap<Id, Def>,
+    defs_per_file: HashMap<PathBuf, Vec<Id>>,
+    children: HashMap<Id, Vec<Id>>,
+    def_names: HashMap<String, Vec<Id>>,
+    ref_spans: HashMap<Id, Vec<Span>>,
     globs: HashMap<Span, Glob>,
-    impls: HashMap<u32, Vec<Span>>,
+    impls: HashMap<Id, Vec<Span>>,
 
     name: String,
-    root_id: Option<u32>,
+    root_id: Option<Id>,
     timestamp: Option<SystemTime>,
 }
 
@@ -559,7 +559,7 @@ pub struct Def {
     pub name: String,
     pub qualname: String,
     pub api_crate: bool,
-    pub parent: Option<u32>,
+    pub parent: Option<Id>,
     pub value: String,
     pub docs: String,
     pub sig: Option<Signature>,
@@ -577,7 +577,7 @@ pub struct Signature {
 
 #[derive(Debug, Clone)]
 pub struct SigElement {
-    pub id: u32,
+    pub id: Id,
     pub start: usize,
     pub end: usize,
 }
@@ -623,7 +623,7 @@ impl Analysis {
         self.per_crate.insert(path, per_crate);
     }
 
-    fn has_def(&self, id: u32) -> bool {
+    fn has_def(&self, id: Id) -> bool {
         self.for_each_crate(|c| c.defs.get(&id).map(|_| ())).is_some()
     }
 
@@ -652,17 +652,17 @@ impl Analysis {
         result
     }
 
-    fn def_id_for_span(&self, span: &Span) -> Option<u32> {
+    fn def_id_for_span(&self, span: &Span) -> Option<Id> {
         self.for_each_crate(|c| c.def_id_for_span.get(span).cloned())
     }
 
-    fn with_defs<F, T>(&self, id: u32, f: F) -> Option<T>
+    fn with_defs<F, T>(&self, id: Id, f: F) -> Option<T>
         where F: Fn(&Def) -> T
     {
         self.for_each_crate(|c| c.defs.get(&id).map(&f))
     }
 
-    fn with_defs_and_then<F, T>(&self, id: u32, f: F) -> Option<T>
+    fn with_defs_and_then<F, T>(&self, id: Id, f: F) -> Option<T>
         where F: Fn(&Def) -> Option<T>
     {
         self.for_each_crate(|c| c.defs.get(&id).and_then(&f))
@@ -674,8 +674,8 @@ impl Analysis {
         self.for_each_crate(|c| c.globs.get(span).map(&f))
     }
 
-    fn for_each_child<F, T>(&self, id: u32, mut f: F) -> Option<Vec<T>>
-        where F: FnMut(u32, &Def) -> T
+    fn for_each_child<F, T>(&self, id: Id, mut f: F) -> Option<Vec<T>>
+        where F: FnMut(Id, &Def) -> T
     {
         for per_crate in self.per_crate.values() {
             if let Some(children) = per_crate.children.get(&id) {
@@ -692,27 +692,36 @@ impl Analysis {
         Some(vec![])
     }
 
-    fn with_ref_spans<F, T>(&self, id: u32, f: F) -> Option<T>
+    fn with_ref_spans<F, T>(&self, id: Id, f: F) -> Option<T>
         where F: Fn(&Vec<Span>) -> T
     {
         self.for_each_crate(|c| c.ref_spans.get(&id).map(&f))
     }
 
     fn with_defs_per_file<F, T>(&self, file: &Path, f: F) -> Option<T>
-        where F: Fn(&Vec<u32>) -> T
+        where F: Fn(&Vec<Id>) -> T
     {
         self.for_each_crate(|c| c.defs_per_file.get(file).map(&f))
     }
 
     fn with_def_names<F, T>(&self, name: &str, f: F) -> Vec<T>
-        where F: Fn(&Vec<u32>) -> Vec<T>
+        where F: Fn(&Vec<Id>) -> Vec<T>
     {
         self.for_all_crates(|c| c.def_names.get(name).map(&f))
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct Id(u32);
+
+impl ::std::fmt::Display for Id {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 // Used to indicate a missing index in the Id.
-const NULL: u32 = u32::max_value();
+const NULL: Id = Id(u32::max_value());
 
 #[cfg(test)]
 mod tests {

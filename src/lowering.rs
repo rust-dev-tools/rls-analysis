@@ -10,7 +10,7 @@
 
 use data;
 use raw::{self, Format, RelationKind, };
-use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement};
+use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement, Id};
 use util;
 
 use span;
@@ -270,8 +270,8 @@ impl CrateReader {
         }
     }
 
-    fn id_from_compiler_id(&self, id: &data::Id) -> u32 {
-        if id.krate == NULL || id.index == NULL {
+    fn id_from_compiler_id(&self, id: &data::Id) -> Id {
+        if id.krate == u32::max_value() || id.index == u32::max_value() {
             return NULL;
         }
         // We build an id by looking up the local crate number into a global crate number and using
@@ -289,11 +289,11 @@ impl CrateReader {
             id.index
         };
 
-        krate << 24 | crate_local
+        Id(krate << 24 | crate_local)
     }
 }
 
-fn abs_ref_id<L: AnalysisLoader>(id: u32, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>) -> Option<u32> {
+fn abs_ref_id<L: AnalysisLoader>(id: Id, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>) -> Option<Id> {
     if project_analysis.has_def(id) || analysis.defs.contains_key(&id) {
         return Some(id)
     }
