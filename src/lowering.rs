@@ -195,7 +195,7 @@ impl CrateReader {
                     },
                     sig: d.sig.map(|ref s| self.lower_sig(s, &self.base_dir)),
                 };
-                trace!("record def: {:?}/{:?} ({}): {:?}", id, d.id, self.crate_map[d.id.krate as usize],  def);
+                info!("record def: {:?}/{:?} ({}): {:?}", id, d.id, self.crate_map[d.id.krate as usize],  def);
 
                 if d.kind == super::raw::DefKind::Mod && def.name == "" {
                     assert!(analysis.root_id.is_none());

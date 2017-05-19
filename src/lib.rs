@@ -269,7 +269,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     pub fn for_each_child_def<F, T>(&self, id: u32, f: F) -> AResult<Vec<T>>
-        where F: Fn(u32, &Def) -> T
+        where F: FnMut(u32, &Def) -> T
     {
         self.with_analysis(|a| a.for_each_child(id, f))
     }
@@ -674,12 +674,18 @@ impl Analysis {
         self.for_each_crate(|c| c.globs.get(span).map(&f))
     }
 
-    fn for_each_child<F, T>(&self, id: u32, f: F) -> Option<Vec<T>>
-        where F: Fn(u32, &Def) -> T
+    fn for_each_child<F, T>(&self, id: u32, mut f: F) -> Option<Vec<T>>
+        where F: FnMut(u32, &Def) -> T
     {
         for per_crate in self.per_crate.values() {
             if let Some(children) = per_crate.children.get(&id) {
-                return Some(children.iter().map(|id| f(*id, &per_crate.defs[id])).collect());
+                return Some(children.iter().filter_map(|id| {
+                    let def = per_crate.defs.get(id);
+                    if def.is_none() {
+                        info!("def not found for {}", id);
+                    }
+                    def.map(|def| f(*id, &def))
+                }).collect());
             }
         }
 
