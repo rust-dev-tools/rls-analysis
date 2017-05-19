@@ -712,7 +712,7 @@ impl Analysis {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
-pub struct Id(u32);
+pub struct Id(u64);
 
 impl ::std::fmt::Display for Id {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -721,7 +721,7 @@ impl ::std::fmt::Display for Id {
 }
 
 // Used to indicate a missing index in the Id.
-const NULL: Id = Id(u32::max_value());
+const NULL: Id = Id(u64::max_value());
 
 #[cfg(test)]
 mod tests {
