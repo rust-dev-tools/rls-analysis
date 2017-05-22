@@ -562,7 +562,7 @@ pub struct Def {
     pub parent: Option<Id>,
     pub value: String,
     pub docs: String,
-    pub sig: Option<Signature>,
+    // pub sig: Option<Signature>,
 }
 
 #[derive(Debug, Clone)]

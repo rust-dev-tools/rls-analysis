@@ -10,7 +10,7 @@
 
 use data;
 use raw::{self, Format, RelationKind, };
-use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Signature, SigElement, Id};
+use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Id};
 use util;
 
 use span;
@@ -193,7 +193,7 @@ impl CrateReader {
                         Some(index) if !self.full_docs => d.docs[..index].to_owned(),
                         _ => d.docs,
                     },
-                    sig: d.sig.map(|ref s| self.lower_sig(s, &self.base_dir)),
+                    // sig: d.sig.map(|ref s| self.lower_sig(s, &self.base_dir)),
                 };
                 info!("record def: {:?}/{:?} ({}): {:?}", id, d.id, self.crate_map[d.id.krate as usize],  def);
 
@@ -251,24 +251,24 @@ impl CrateReader {
         }
     }
 
-    fn lower_sig(&self, raw_sig: &raw::Signature, base_dir: &Path) -> Signature {
-        Signature {
-            span: lower_span(&raw_sig.span, base_dir),
-            text: raw_sig.text.clone(),
-            ident_start: raw_sig.ident_start as u32,
-            ident_end: raw_sig.ident_end as u32,
-            defs: raw_sig.defs.iter().map(|se| self.lower_sig_element(se)).collect(),
-            refs: raw_sig.refs.iter().map(|se| self.lower_sig_element(se)).collect(),
-        }
-    }
+    // fn lower_sig(&self, raw_sig: &raw::Signature, base_dir: &Path) -> Signature {
+    //     Signature {
+    //         span: lower_span(&raw_sig.span, base_dir),
+    //         text: raw_sig.text.clone(),
+    //         ident_start: raw_sig.ident_start as u32,
+    //         ident_end: raw_sig.ident_end as u32,
+    //         defs: raw_sig.defs.iter().map(|se| self.lower_sig_element(se)).collect(),
+    //         refs: raw_sig.refs.iter().map(|se| self.lower_sig_element(se)).collect(),
+    //     }
+    // }
 
-    fn lower_sig_element(&self, raw_se: &raw::SigElement) -> SigElement {
-        SigElement {
-            id: self.id_from_compiler_id(&raw_se.id),
-            start: raw_se.start,
-            end: raw_se.end,
-        }
-    }
+    // fn lower_sig_element(&self, raw_se: &raw::SigElement) -> SigElement {
+    //     SigElement {
+    //         id: self.id_from_compiler_id(&raw_se.id),
+    //         start: raw_se.start,
+    //         end: raw_se.end,
+    //     }
+    // }
 
     fn id_from_compiler_id(&self, id: &data::Id) -> Id {
         if id.krate == u32::max_value() || id.index == u32::max_value() {

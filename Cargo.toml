@@ -1,6 +1,6 @@
 [package]
 name = "rls-analysis"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Nick Cameron <ncameron@mozilla.com>"]
 description = "Library for processing rustc's save-analysis data for the RLS"
 license = "Apache-2.0/MIT"
@@ -10,6 +10,6 @@ categories = ["development-tools"]
 [dependencies]
 rustc-serialize = "0.3"
 log = "0.3"
-rls-data = "0.3"
+rls-data = "0.4.1"
 rls-span = "0.4"
 derive-new = "0.3"
