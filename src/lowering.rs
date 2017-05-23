@@ -10,7 +10,7 @@
 
 use data;
 use raw::{self, Format, RelationKind, };
-use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, Span, NULL, Def, Glob, Id};
+use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, Span, NULL, Def, Glob, Id};
 use util;
 
 use span;
@@ -21,8 +21,8 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 // f is a function used to record the lowered crate into analysis.
-pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, base_dir: &Path, full_docs: bool, analysis: &AnalysisHost<L>, mut f: F) -> Result<(), ()>
-    where F: FnMut(&AnalysisHost<L>, PerCrateAnalysis, Option<PathBuf>) -> Result<(), ()>,
+pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, base_dir: &Path, full_docs: bool, analysis: &AnalysisHost<L>, mut f: F) -> AResult<()>
+    where F: FnMut(&AnalysisHost<L>, PerCrateAnalysis, Option<PathBuf>) -> AResult<()>,
           L: AnalysisLoader
 {
     let rss = util::get_resident().unwrap_or(0);

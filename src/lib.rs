@@ -44,7 +44,34 @@ pub struct CargoAnalysisLoader {
     target: Target,
 }
 
-pub type AResult<T> = Result<T, ()>;
+pub type AResult<T> = Result<T, AError>;
+
+#[derive(Debug, Copy, Clone)]
+pub enum AError {
+    MutexPoison,
+    Unclassified,
+}
+
+impl ::std::error::Error for AError {
+    fn description(&self) -> &str {
+        match *self {
+            AError::MutexPoison => "poison error in a mutex (usually a secondary error)",
+            AError::Unclassified => "unknown error",
+        }        
+    }
+}
+
+impl ::std::fmt::Display for AError {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "{}", ::std::error::Error::description(self))
+    }
+}
+
+impl<T> From<::std::sync::PoisonError<T>> for AError {
+    fn from(_: ::std::sync::PoisonError<T>) -> AError {
+        AError::MutexPoison
+    }
+}
 
 macro_rules! clone_field {
     ($field: ident) => { |x| x.$field.clone() }
@@ -188,7 +215,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                         full_docs,
                         self,
                         |host, per_crate, path| {
-            let mut a = host.analysis.lock().map_err(|_| ())?;
+            let mut a = host.analysis.lock()?;
             a.as_mut().unwrap().update(per_crate, path);
             Ok(())
         })
@@ -197,7 +224,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     pub fn reload(&self, path_prefix: &Path, base_dir: &Path, full_docs: bool) -> AResult<()> {
         info!("reload {:?} {:?}", path_prefix, base_dir);
         let empty = {
-            let a = self.analysis.lock().map_err(|_| ())?;
+            let a = self.analysis.lock()?;
             a.is_none()
         };
         if empty || self.loader.needs_hard_reload(path_prefix) {
@@ -205,14 +232,14 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         }
 
         let timestamps = {
-            let a = self.analysis.lock().map_err(|_| ())?;
+            let a = self.analysis.lock()?;
             a.as_ref().unwrap().timestamps()
         };
 
         let raw_analysis = read_analyis_incremental(&self.loader, timestamps);
 
         lowering::lower(raw_analysis, base_dir, full_docs, self, |host, per_crate, path| {
-            let mut a = host.analysis.lock().map_err(|_| ())?;
+            let mut a = host.analysis.lock()?;
             a.as_mut().unwrap().update(per_crate, path);
             Ok(())
         })
@@ -233,17 +260,17 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         });
 
         if let Err(s) = lowering_result {
-            let mut a = self.analysis.lock().map_err(|_| ())?;
+            let mut a = self.analysis.lock()?;
             *a = None;
             return Err(s);
         }
 
         {
-            let mut mcm = self.master_crate_map.lock().map_err(|_| ())?;
+            let mut mcm = self.master_crate_map.lock()?;
             *mcm = fresh_host.master_crate_map.into_inner().unwrap();
         }
 
-        let mut a = self.analysis.lock().map_err(|_| ())?;
+        let mut a = self.analysis.lock()?;
         *a = Some(fresh_host.analysis.into_inner().unwrap().unwrap());
         Ok(())
     }
@@ -442,15 +469,11 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     fn with_analysis<F, T>(&self, f: F) -> AResult<T>
         where F: FnOnce(&Analysis) -> Option<T>
     {
-        match self.analysis.lock() {
-            Ok(a) => {
-                if let Some(ref a) = *a {
-                    f(a).ok_or(())
-                } else {
-                    Err(())
-                }
-            }
-            _ => Err(()),
+        let a = self.analysis.lock()?;
+        if let Some(ref a) = *a {
+            f(a).ok_or(AError::Unclassified)
+        } else {
+            Err(AError::Unclassified)
         }
     }
 
