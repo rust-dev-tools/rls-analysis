@@ -43,7 +43,7 @@ pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, base_dir: &Path, full_docs: bo
     }
 
     let time = t_start.elapsed();
-    let rss = util::get_resident().unwrap_or(0) as isize - rss as isize();
+    let rss = util::get_resident().unwrap_or(0) as isize - rss as isize;
     info!("Total lowering time: {:.2}s", time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
     info!("Diff in rss: {:.2}KB", rss as f64 / 1000.0);
 
