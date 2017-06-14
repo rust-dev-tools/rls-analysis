@@ -427,8 +427,19 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         result
     }
 
-    pub fn find_impls(&self, id: Id) -> AResult<Vec<Span>> {
-        self.with_analysis(|a| Some(a.for_all_crates(|c| c.impls.get(&id).map(|v| v.clone()))))
+    pub fn find_impls(&self, id: Id, provide_api_spans: bool) -> AResult<Vec<Span>> {
+        self.with_analysis(|a| {
+            Some(a.for_all_crates(|c| {
+                c.impls
+                    .get(&id)
+                    .map(|x| {
+                             x.iter()
+                                 .filter(|s| provide_api_spans || !s.belongs_to_api)
+                                 .map(|s| s.span.clone())
+                                 .collect()
+                         })
+            }))
+        })
     }
 
     /// Search for a symbol name, returning a list of def_ids for that name.
@@ -568,11 +579,17 @@ pub struct PerCrateAnalysis {
     def_names: HashMap<String, Vec<Id>>,
     ref_spans: HashMap<Id, Vec<Span>>,
     globs: HashMap<Span, Glob>,
-    impls: HashMap<Id, Vec<Span>>,
+    impls: HashMap<Id, Vec<SpanApi>>,
 
     name: String,
     root_id: Option<Id>,
     timestamp: Option<SystemTime>,
+}
+
+#[derive(Clone, Debug)]
+struct SpanApi {
+    span: Span,
+    belongs_to_api: bool,
 }
 
 #[derive(Debug, Clone)]

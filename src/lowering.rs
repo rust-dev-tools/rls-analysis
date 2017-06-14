@@ -10,7 +10,7 @@
 
 use data;
 use raw::{self, Format, RelationKind, };
-use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, Span, NULL, Def, Glob, Id};
+use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, Span, SpanApi, NULL, Def, Glob, Id};
 use util;
 
 use span;
@@ -122,9 +122,7 @@ impl CrateReader {
         reader.read_defs(krate.analysis.defs, &mut per_crate, api_crate);
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
-        if !api_crate {
-            reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
-        }
+        reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis, api_crate);
 
         per_crate.name = reader.crate_name;
 
@@ -230,7 +228,11 @@ impl CrateReader {
         }
     }
 
-    fn read_impls<L: AnalysisLoader>(&self, relations: Vec<raw::Relation>, analysis: &mut PerCrateAnalysis, project_analysis: &AnalysisHost<L>) {
+    fn read_impls<L: AnalysisLoader>(&self,
+                                     relations: Vec<raw::Relation>,
+                                     analysis: &mut PerCrateAnalysis,
+                                     project_analysis: &AnalysisHost<L>,
+                                     is_api_crate: bool) {
         for r in relations {
             if r.kind != RelationKind::Impl {
                 continue;
@@ -238,6 +240,7 @@ impl CrateReader {
             let self_id = self.id_from_compiler_id(&r.from);
             let trait_id = self.id_from_compiler_id(&r.to);
             let span = lower_span(&r.span, &self.base_dir);
+            let span = SpanApi{span, belongs_to_api: is_api_crate};
             if self_id != NULL {
                 if let Some(self_id) = abs_ref_id(self_id, analysis, project_analysis) {
                     trace!("record impl for self type {:?} {}", span, self_id);
