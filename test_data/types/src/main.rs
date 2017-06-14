@@ -10,3 +10,9 @@ fn main() {
 fn foo(x: Foo) -> Foo {
     panic!();
 }
+
+impl PartialEq for Foo {
+    fn eq(&self, other: &Foo) -> bool {
+        true
+    }
+}
