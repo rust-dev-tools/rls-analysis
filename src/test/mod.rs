@@ -127,7 +127,7 @@ fn test_types() {
 
     let refs = host.find_all_refs_by_id(id).unwrap();
     println!("{:?}", refs);
-    assert_eq!(refs.len(), 5);
+    assert_eq!(refs.len(), 7);
     assert_eq!(refs[0].file, Path::new("test_data/types/src/main.rs"));
     assert_eq!(refs[0].range.row_start.0, 0);
     assert_eq!(refs[1].file, Path::new("test_data/types/src/main.rs"));
@@ -138,4 +138,34 @@ fn test_types() {
     assert_eq!(refs[3].range.row_start.0, 9);
     assert_eq!(refs[4].file, Path::new("test_data/types/src/main.rs"));
     assert_eq!(refs[4].range.row_start.0, 9);
+    assert_eq!(refs[5].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(refs[5].range.row_start.0, 13);
+    assert_eq!(refs[6].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(refs[6].range.row_start.0, 14);
+}
+
+#[test]
+fn test_find_impls() {
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(Path::new("test_data/types/save-analysis").to_owned()));
+    host.reload(Path::new("test_data/types"), Path::new("test_data/types"), false).unwrap();
+
+    let ids = host.search_for_id("Foo").unwrap();
+    assert_eq!(ids.len(), 1);
+    let id = ids[0];
+
+    let spans = host.find_impls(id, false).unwrap();
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(spans[0].range.row_start.0, 13);
+    assert_eq!(spans[0].range.col_start.0, 19);
+    assert_eq!(spans[0].range.col_end.0, 22);
+
+    let spans = host.find_impls(id, true).unwrap();
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].file, Path::new("test_data/types/src/main.rs"));
+    assert_eq!(spans[0].range.row_start.0, 13);
+    assert_eq!(spans[0].range.col_start.0, 19);
+    assert_eq!(spans[0].range.col_end.0, 22);
+
+    // TODO test with some API crate data
 }
