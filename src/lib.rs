@@ -429,6 +429,30 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         result
     }
 
+    pub fn borrow_info(&self, span: &Span) -> AResult<BorrowData> {
+        self.with_analysis(|a|
+            a.def_id_for_span(span)
+             .and_then(|id| a.for_each_crate(|c| {
+                trace!("Searching in crate `{}`", c.name);
+                for (_, b) in c.per_fn_borrows.iter() {
+                    // If we find a `BorrowData` where there's a matching scope, then filter out
+                    // out matching items.
+                    if b.scopes.iter().any(|a| a.ref_id == id) {
+                        trace!("Found borrow for id `{}` in crate `{}`", id, c.name);
+                        return Some(BorrowData {
+                            ref_id: b.ref_id,
+                            scopes: b.scopes.iter().filter(|s| s.ref_id == id).map(|s| s.clone()).collect(),
+                            loans: b.loans.iter().filter(|l| l.ref_id == id).map(|l| l.clone()).collect(),
+                            moves: b.moves.iter().filter(|m| m.ref_id == id).map(|m| m.clone()).collect(),
+                        });
+                    }
+                }
+
+                None
+            }))
+        )
+    }
+
     pub fn find_impls(&self, id: Id) -> AResult<Vec<Span>> {
         self.with_analysis(|a| Some(a.for_all_crates(|c| c.impls.get(&id).map(|v| v.clone()))))
     }
@@ -571,6 +595,7 @@ pub struct PerCrateAnalysis {
     ref_spans: HashMap<Id, Vec<Span>>,
     globs: HashMap<Span, Glob>,
     impls: HashMap<Id, Vec<Span>>,
+    per_fn_borrows: HashMap<Id, BorrowData>,
 
     name: String,
     root_id: Option<Id>,
@@ -612,6 +637,39 @@ pub struct Glob {
     pub value: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct BorrowData {
+    pub ref_id: Id,
+    pub scopes: Vec<Scope>,
+    pub loans: Vec<Loan>,
+    pub moves: Vec<Move>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BorrowKind {
+    ImmBorrow,
+    MutBorrow,
+}
+
+#[derive(Debug, Clone)]
+pub struct Loan {
+    pub ref_id: Id,
+    pub kind: BorrowKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Move {
+    pub ref_id: Id,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Scope {
+    pub ref_id: Id,
+    pub span: Span,
+}
+
 impl PerCrateAnalysis {
     pub fn new() -> PerCrateAnalysis {
         PerCrateAnalysis {
@@ -623,6 +681,7 @@ impl PerCrateAnalysis {
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
             impls: HashMap::new(),
+            per_fn_borrows: HashMap::new(),
             name: String::new(),
             root_id: None,
             timestamp: None,

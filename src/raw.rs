@@ -9,7 +9,7 @@
 use AnalysisLoader;
 use listings::{DirectoryListing, ListingKind};
 pub use data::{Def, DefKind, Ref, CratePreludeData, Signature, SigElement, Import, Format,
-               RelationKind, Relation, SpanData};
+               RelationKind, Relation, SpanData, BorrowData};
 use data::Analysis;
 
 

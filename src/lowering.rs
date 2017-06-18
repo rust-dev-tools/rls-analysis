@@ -10,7 +10,8 @@
 
 use data;
 use raw::{self, Format, RelationKind, };
-use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, Span, NULL, Def, Glob, Id};
+use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, Span, NULL, Def, Glob,
+    Id, BorrowData, Scope, Loan, Move, BorrowKind};
 use util;
 
 use span;
@@ -35,9 +36,10 @@ pub fn lower<F, L>(raw_analysis: Vec<raw::Crate>, base_dir: &Path, full_docs: bo
 
         let time = t_start.elapsed();
         info!("Lowering {:?} in {:.2}s", path.as_ref().map(|p| p.display().to_string()), time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0);
-        info!("    defs:  {}", per_crate.defs.len());
-        info!("    refs:  {}", per_crate.ref_spans.len());
-        info!("    globs: {}", per_crate.globs.len());
+        info!("    defs:    {}", per_crate.defs.len());
+        info!("    refs:    {}", per_crate.ref_spans.len());
+        info!("    globs:   {}", per_crate.globs.len());
+        info!("    borrows: {}", per_crate.per_fn_borrows.len());
 
         f(analysis, per_crate, path)?;
     }
@@ -123,6 +125,7 @@ impl CrateReader {
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
         reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
+        reader.read_borrows(krate.analysis.per_fn_borrows, &mut per_crate, project_analysis);
 
         per_crate.name = reader.crate_name;
 
@@ -248,6 +251,66 @@ impl CrateReader {
                     analysis.impls.entry(trait_id).or_insert_with(|| vec![]).push(span);
                 }
             }
+        }
+    }
+
+    fn read_borrows<L: AnalysisLoader>(&self,
+            per_fn_borrows: Vec<raw::BorrowData>,
+            analysis: &mut PerCrateAnalysis,
+            project_analysis: &AnalysisHost<L>) {
+        for b in per_fn_borrows {
+            let def_id = {
+                let def_id = self.id_from_compiler_id(&b.ref_id);
+                if def_id == NULL {
+                    continue;
+                }
+
+                match abs_ref_id(def_id, analysis, project_analysis) {
+                    Some(def_id) => def_id,
+                    None => continue,
+                }
+            };
+
+            let scopes = b.scopes.into_iter().filter_map(|a|
+                abs_ref_id(self.id_from_compiler_id(&a.ref_id), analysis, project_analysis)
+                    .map(|id| Scope {
+                        ref_id: id,
+                        span: lower_span(&a.span, &self.base_dir),
+                    })
+                    .or_else(|| {
+                        info!("Could not map assignment with id {:?}", a.ref_id);
+                        None
+                    })).collect();
+            let loans = b.loans.into_iter().filter_map(|l|
+                abs_ref_id(self.id_from_compiler_id(&l.ref_id), analysis, project_analysis)
+                    .map(|id| Loan {
+                        ref_id: id,
+                        kind: match l.kind {
+                            data::BorrowKind::ImmBorrow => BorrowKind::ImmBorrow,
+                            data::BorrowKind::MutBorrow => BorrowKind::MutBorrow,
+                        },
+                        span: lower_span(&l.span, &self.base_dir),
+                    })
+                    .or_else(|| {
+                        info!("Could not map loan with id {:?}", l.ref_id);
+                        None
+                    })).collect();
+            let moves = b.moves.into_iter().filter_map(|m|
+                abs_ref_id(self.id_from_compiler_id(&m.ref_id), analysis, project_analysis)
+                    .map(|id| Move {
+                        ref_id: id,
+                        span: lower_span(&m.span, &self.base_dir),
+                    })
+                    .or_else(|| {
+                        info!("Could not map move with id {:?}", m.ref_id);
+                        None
+                    })).collect();
+            analysis.per_fn_borrows.entry(def_id).or_insert_with(|| BorrowData {
+                ref_id: def_id,
+                scopes,
+                loans,
+                moves,
+            });
         }
     }
 
