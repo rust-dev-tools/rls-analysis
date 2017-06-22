@@ -10,8 +10,9 @@
 
 use data;
 use raw::{self, Format, RelationKind, };
-use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, Span, NULL, Def, Glob,
+use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, NULL, Def, Glob,
     Id, BorrowData, Scope, Loan, Move, BorrowKind};
+use super::search_span::{Span, SearchSpan};
 use util;
 
 use span;
@@ -270,6 +271,9 @@ impl CrateReader {
                     None => continue,
                 }
             };
+
+            let fn_span = lower_span(&b.span.expect("All borrow data structs should have spans"), &self.base_dir);
+            analysis.fn_span_lookup_tree.insert(SearchSpan::in_tree(&fn_span), def_id);
 
             let scopes = b.scopes.into_iter().filter_map(|a|
                 abs_ref_id(self.id_from_compiler_id(&a.ref_id), analysis, project_analysis)
