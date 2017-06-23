@@ -249,7 +249,6 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     // Reloads the entire project's analysis data.
     pub fn hard_reload(&self, path_prefix: &Path, base_dir: &Path, full_docs: bool) -> AResult<()> {
         trace!("hard_reload {:?} {:?}", path_prefix, base_dir);
-        let start_time = ::std::time::Instant::now();
         self.loader.set_path_prefix(path_prefix);
         let raw_analysis = read_analyis_incremental(&self.loader, HashMap::new());
 
