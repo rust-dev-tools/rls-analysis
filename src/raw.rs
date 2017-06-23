@@ -18,7 +18,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{SystemTime, Instant};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -46,7 +46,6 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
                                                    timestamps: HashMap<PathBuf, Option<SystemTime>>)
                                                    -> Vec<Crate> {
     loader.iter_paths(|p| {
-        use std::time::*;
 
         let t = Instant::now();
 
@@ -79,8 +78,8 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
             }
         }
 
-        let _d = t.elapsed();
-        // println!("reading {} crates from {} in {}.{:09}s", result.len(), p.display(), _d.as_secs(), _d.subsec_nanos());
+        let d = t.elapsed();
+        info!("reading {} crates from {} in {}.{:09}s", result.len(), p.display(), d.as_secs(), d.subsec_nanos());
 
         result
     })
@@ -93,10 +92,15 @@ pub fn read_analysis<L: AnalysisLoader>(loader: &L) -> Vec<Crate> {
 fn read_crate_data(path: &Path) -> Option<Analysis> {
     info!("read_crate_data {:?}", path);
     // TODO unwraps
+    let t = Instant::now();
     let mut file = File::open(&path).unwrap();
     let mut buf = String::new();
     file.read_to_string(&mut buf).unwrap();
     let s = ::rustc_serialize::json::decode(&buf);
+
+    let d = t.elapsed();
+    info!("reading {:?} {}.{:09}s", path, d.as_secs(), d.subsec_nanos());
+
     if let Err(ref e) = s {
         info!("deserialisation error: {:?}", e);
     }

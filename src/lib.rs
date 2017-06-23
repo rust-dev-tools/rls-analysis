@@ -222,7 +222,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     pub fn reload(&self, path_prefix: &Path, base_dir: &Path, full_docs: bool) -> AResult<()> {
-        info!("reload {:?} {:?}", path_prefix, base_dir);
+        trace!("reload {:?} {:?}", path_prefix, base_dir);
         let empty = {
             let a = self.analysis.lock()?;
             a.is_none()
@@ -238,15 +238,18 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
         let raw_analysis = read_analyis_incremental(&self.loader, timestamps);
 
-        lowering::lower(raw_analysis, base_dir, full_docs, self, |host, per_crate, path| {
+        let result = lowering::lower(raw_analysis, base_dir, full_docs, self, |host, per_crate, path| {
             let mut a = host.analysis.lock()?;
             a.as_mut().unwrap().update(per_crate, path);
             Ok(())
-        })
+        });
+        result
     }
 
     // Reloads the entire project's analysis data.
     pub fn hard_reload(&self, path_prefix: &Path, base_dir: &Path, full_docs: bool) -> AResult<()> {
+        trace!("hard_reload {:?} {:?}", path_prefix, base_dir);
+        let start_time = ::std::time::Instant::now();
         self.loader.set_path_prefix(path_prefix);
         let raw_analysis = read_analyis_incremental(&self.loader, HashMap::new());
 
