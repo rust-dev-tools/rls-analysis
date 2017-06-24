@@ -1,8 +1,22 @@
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::ops::Range;
-use span;
+use super::Span;
 
-pub type Span = span::Span<span::ZeroIndexed>;
+///! These types are used to assist in finding a range of items in a BTreeMap when
+///! the keys to the BTreeMap are spans. You are supposed to use the type InTreeSpan
+///! as the key for the BTreeMap, and then use the struct created from SearchSpan::range
+///! to call the BTreeMap's range method. Here's a graphical explanation of how this
+///! works:
+///!     |-----|     <- span used for SearchSpan::range
+///!                    The spans below are all keys in the BTreeMap
+///!                    In Result? Reason
+///! |-------------| <- Yes        (wraps the SearchSpan) \ 
+///!    |-------|    <- Yes        (wraps the SearchSpan) - up to you which results to use
+///!   |----|        <- No         (only wraps the start of the SearchSpan)
+///!       |-----|   <- No         (only wraps the end of the SearchSpan)
+///! |-|             <- No         (doesn't wrap)
+///!             |-| <- No         (doesn't wrap)
 
 #[derive(Debug)]
 enum SpanKind {
@@ -12,19 +26,50 @@ enum SpanKind {
 }
 
 #[derive(Debug)]
+pub struct InTreeSpan(SearchSpan);
+
+impl InTreeSpan {
+    pub fn new(span: &Span) -> Self {
+        InTreeSpan(SearchSpan(span.clone(), SpanKind::InTree))
+    }
+
+    pub fn span(&self) -> &Span {
+        &(self.0).0
+    }
+}
+
+impl Borrow<SearchSpan> for InTreeSpan {
+    fn borrow(&self) -> &SearchSpan {
+        &self.0
+    }
+}
+
+impl PartialEq<InTreeSpan> for InTreeSpan {
+    fn eq(&self, other: &InTreeSpan) -> bool {
+        self.span().eq(other.span())
+    }
+}
+
+impl Eq for InTreeSpan { }
+
+impl Ord for InTreeSpan {
+    fn cmp(&self, other: &InTreeSpan) -> Ordering {
+        self.span().cmp(other.span())
+    }
+}
+
+impl PartialOrd<InTreeSpan> for InTreeSpan {
+    fn partial_cmp(&self, other: &InTreeSpan) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Debug)]
 pub struct SearchSpan(Span, SpanKind);
 
 impl SearchSpan {
     pub fn range(span: &Span) -> Range<SearchSpan> {
         SearchSpan(span.clone(), SpanKind::Start)..SearchSpan(span.clone(), SpanKind::End)
-    }
-
-    pub fn in_tree(span: &Span) -> Self {
-        SearchSpan(span.clone(), SpanKind::InTree)
-    }
-
-    pub fn span(&self) -> &Span {
-        &self.0
     }
 }
 
@@ -41,9 +86,9 @@ impl PartialEq<SearchSpan> for SearchSpan {
             | (&SpanKind::End, &SpanKind::Start) => self.0 == other.0,
             _ => false,
         }
-
     }
 }
+
 impl Eq for SearchSpan { }
 
 impl Ord for SearchSpan {
@@ -87,6 +132,7 @@ impl Ord for SearchSpan {
         }
     }
 }
+
 impl PartialOrd<SearchSpan> for SearchSpan {
     fn partial_cmp(&self, other: &SearchSpan) -> Option<Ordering> {
         Some(self.cmp(other))

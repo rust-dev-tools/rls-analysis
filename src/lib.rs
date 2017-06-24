@@ -27,8 +27,7 @@ mod test;
 pub use self::raw::{Target, name_space_for_def_kind, read_analyis_incremental};
 
 mod search_span;
-use search_span::*;
-pub use search_span::Span;
+use search_span::{SearchSpan, InTreeSpan};
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -37,6 +36,8 @@ use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 use std::collections::BTreeMap;
+
+pub type Span = span::Span<span::ZeroIndexed>;
 
 pub struct AnalysisHost<L: AnalysisLoader = CargoAnalysisLoader> {
     analysis: Mutex<Option<Analysis>>,
@@ -449,7 +450,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                     };
 
                     if borrow_data.scopes.iter().any(|a| a.ref_id == id) {
-                        // If we find a `BorrowData` where there's a matching scope, then filter out
+                        // If we find a `BorrowData` where there's a matching scope, then filter
                         // out matching items.
                         trace!("Found borrow for id `{}` in crate `{}`", id, c.name);
                         Some(BorrowData {
@@ -616,7 +617,7 @@ pub struct PerCrateAnalysis {
     globs: HashMap<Span, Glob>,
     impls: HashMap<Id, Vec<Span>>,
     per_fn_borrows: HashMap<Id, BorrowData>,
-    fn_span_lookup_tree: BTreeMap<SearchSpan, Id>,
+    fn_span_lookup_tree: BTreeMap<InTreeSpan, Id>,
 
     name: String,
     root_id: Option<Id>,

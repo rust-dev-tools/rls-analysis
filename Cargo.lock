@@ -4,7 +4,7 @@ version = "0.5.0"
 dependencies = [
  "derive-new 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "rls-data 0.6.0",
+ "rls-data 0.8.0",
  "rls-span 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -30,7 +30,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "rls-data"
-version = "0.6.0"
+version = "0.8.0"
 dependencies = [
  "rls-span 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",

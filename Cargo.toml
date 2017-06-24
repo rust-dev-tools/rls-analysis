@@ -10,6 +10,6 @@ categories = ["development-tools"]
 [dependencies]
 rustc-serialize = "0.3"
 log = "0.3"
-rls-data = { path = "../rls-data", default-features = true, features = ["borrows"] }
+rls-data = { path = "../rls-data", features = ["borrows"] }
 rls-span = "0.4"
 derive-new = "0.3"
