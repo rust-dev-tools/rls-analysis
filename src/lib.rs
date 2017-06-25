@@ -26,12 +26,18 @@ mod test;
 
 pub use self::raw::{Target, name_space_for_def_kind, read_analyis_incremental};
 
+mod search_span;
+use search_span::{SearchSpan, InTreeSpan};
+
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
+use std::collections::BTreeMap;
+
+pub type Span = span::Span<span::ZeroIndexed>;
 
 pub struct AnalysisHost<L: AnalysisLoader = CargoAnalysisLoader> {
     analysis: Mutex<Option<Analysis>>,
@@ -429,6 +435,47 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         result
     }
 
+    pub fn borrow_info(&self, span: &Span) -> AResult<BorrowData> {
+        self.with_analysis(|a|
+            a.def_id_for_span(span)
+             .and_then(|id| {
+                let fn_id = match a.fn_id_for_span(span) {
+                    Some(fn_id) => fn_id,
+                    None => { return None; }
+                };
+                a.for_each_crate(|c| {
+                    let borrow_data = match c.per_fn_borrows.get(&fn_id) {
+                        Some(borrow_data) => borrow_data,
+                        None => { return None; }
+                    };
+
+                    if borrow_data.scopes.iter().any(|a| a.ref_id == id) {
+                        // If we find a `BorrowData` where there's a matching scope, then filter
+                        // out matching items.
+                        trace!("Found borrow for id `{}` in crate `{}`", id, c.name);
+                        Some(BorrowData {
+                            ref_id: borrow_data.ref_id,
+                            scopes: borrow_data.scopes.iter()
+                                .filter(|s| s.ref_id == id)
+                                .map(|s| s.clone())
+                                .collect(),
+                            loans: borrow_data.loans.iter()
+                                .filter(|l| l.ref_id == id)
+                                .map(|l| l.clone())
+                                .collect(),
+                            moves: borrow_data.moves.iter()
+                                .filter(|m| m.ref_id == id)
+                                .map(|m| m.clone())
+                                .collect(),
+                        })
+                    } else {
+                        None
+                    }
+                })
+             })
+        )
+    }
+
     pub fn find_impls(&self, id: Id) -> AResult<Vec<Span>> {
         self.with_analysis(|a| Some(a.for_all_crates(|c| c.impls.get(&id).map(|v| v.clone()))))
     }
@@ -547,8 +594,6 @@ impl SymbolResult {
     }
 }
 
-type Span = span::Span<span::ZeroIndexed>;
-
 #[derive(Debug)]
 pub struct Analysis {
     // The primary crate will have its data passed directly, not via a file, so
@@ -571,6 +616,8 @@ pub struct PerCrateAnalysis {
     ref_spans: HashMap<Id, Vec<Span>>,
     globs: HashMap<Span, Glob>,
     impls: HashMap<Id, Vec<Span>>,
+    per_fn_borrows: HashMap<Id, BorrowData>,
+    fn_span_lookup_tree: BTreeMap<InTreeSpan, Id>,
 
     name: String,
     root_id: Option<Id>,
@@ -612,6 +659,39 @@ pub struct Glob {
     pub value: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct BorrowData {
+    pub ref_id: Id,
+    pub scopes: Vec<Scope>,
+    pub loans: Vec<Loan>,
+    pub moves: Vec<Move>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BorrowKind {
+    ImmBorrow,
+    MutBorrow,
+}
+
+#[derive(Debug, Clone)]
+pub struct Loan {
+    pub ref_id: Id,
+    pub kind: BorrowKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Move {
+    pub ref_id: Id,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Scope {
+    pub ref_id: Id,
+    pub span: Span,
+}
+
 impl PerCrateAnalysis {
     pub fn new() -> PerCrateAnalysis {
         PerCrateAnalysis {
@@ -623,6 +703,8 @@ impl PerCrateAnalysis {
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
             impls: HashMap::new(),
+            per_fn_borrows: HashMap::new(),
+            fn_span_lookup_tree: BTreeMap::new(),
             name: String::new(),
             root_id: None,
             timestamp: None,
@@ -679,6 +761,18 @@ impl Analysis {
 
     fn def_id_for_span(&self, span: &Span) -> Option<Id> {
         self.for_each_crate(|c| c.def_id_for_span.get(span).cloned())
+    }
+
+    fn fn_id_for_span(&self, span: &Span) -> Option<Id> {
+        self.for_each_crate(|c|
+            c.fn_span_lookup_tree
+                // SearchSpan is designed to return all keys where the search
+                // span is within the key span.
+                .range(SearchSpan::range(span))
+                // We want the key that's farthest in the file because that will be the smallest
+                // scope that contains the span we're searching by
+                .max_by(|&(left, _), &(right, _)| left.span().range.cmp(&right.span().range))
+                .map(|(_, &id)| id))
     }
 
     fn with_defs<F, T>(&self, id: Id, f: F) -> Option<T>
