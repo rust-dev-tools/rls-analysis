@@ -123,7 +123,7 @@ impl Ord for SearchSpan {
             // marked as less to show that the in-tree span is "inside" the range.
             (&SearchSpan(ref in_tree, SpanKind::InTree), &SearchSpan(ref search, SpanKind::End))
             | (&SearchSpan(ref search, SpanKind::Start), &SearchSpan(ref in_tree, SpanKind::InTree))
-                if is_a_in_b(in_tree, search) => Ordering::Less,
+                if is_a_in_b(search, in_tree) => Ordering::Less,
 
             // These other cases are where the start and end search spans are not inside
             // the in-tree spans, and so we compare the spans normally in order to guide the
