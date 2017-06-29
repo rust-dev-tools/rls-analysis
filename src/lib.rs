@@ -736,7 +736,7 @@ impl Analysis {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, new)]
 pub struct Id(u64);
 
 impl ::std::fmt::Display for Id {
