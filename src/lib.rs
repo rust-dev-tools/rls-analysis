@@ -165,6 +165,16 @@ fn sys_root_path() -> PathBuf {
     option_env!("SYSROOT")
         .map(PathBuf::from)
         .or_else(|| {
+            option_env!("RUSTC")
+                .and_then(|rustc| Command::new(rustc)
+                    .arg("--print")
+                    .arg("sysroot")
+                    .output()
+                    .ok()
+                    .and_then(|out| String::from_utf8(out.stdout).ok())
+                    .map(|s| PathBuf::from(s.trim())))
+        })
+        .or_else(|| {
             Command::new("rustc")
             .arg("--print")
             .arg("sysroot")
@@ -173,7 +183,7 @@ fn sys_root_path() -> PathBuf {
             .and_then(|out| String::from_utf8(out.stdout).ok())
             .map(|s| PathBuf::from(s.trim()))
         })
-        .expect("need to specify SYSROOT env var, \
+        .expect("need to specify SYSROOT or RUSTC env vars, \
                  or rustc must be in PATH")
 }
 
