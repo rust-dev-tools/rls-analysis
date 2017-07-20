@@ -347,6 +347,19 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         self.with_analysis(|a| a.def_id_for_span(span))
     }
 
+    /// Like id, but will only return a value if it is in the same crate as span.
+    pub fn crate_local_id(&self, span: &Span) -> AResult<Id> {
+        self.with_analysis(|a| {
+            a.for_each_crate(|c| c.def_id_for_span.get(span).and_then(|id| {
+                if c.defs.contains_key(id) {
+                    Some(id)
+                } else {
+                    None
+                }
+            }).cloned())
+        })
+    }
+
     pub fn find_all_refs(&self, span: &Span, include_decl: bool) -> AResult<Vec<Span>> {
         let t_start = Instant::now();
         let result = if include_decl {
