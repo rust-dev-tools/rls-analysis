@@ -215,14 +215,12 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     pub fn reload_from_analysis(&self,
                                 analysis: data::Analysis,
                                 path_prefix: &Path,
-                                base_dir: &Path,
-                                full_docs: bool)
+                                base_dir: &Path)
                                 -> AResult<()> {
-        self.reload(path_prefix, base_dir, full_docs)?;
+        self.reload(path_prefix, base_dir)?;
 
         lowering::lower(vec![raw::Crate::new(analysis, SystemTime::now(), None)],
                         base_dir,
-                        full_docs,
                         self,
                         |host, per_crate, path| {
             let mut a = host.analysis.lock()?;
@@ -231,14 +229,14 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         })
     }
 
-    pub fn reload(&self, path_prefix: &Path, base_dir: &Path, full_docs: bool) -> AResult<()> {
+    pub fn reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
         trace!("reload {:?} {:?}", path_prefix, base_dir);
         let empty = {
             let a = self.analysis.lock()?;
             a.is_none()
         };
         if empty || self.loader.needs_hard_reload(path_prefix) {
-            return self.hard_reload(path_prefix, base_dir, full_docs);
+            return self.hard_reload(path_prefix, base_dir);
         }
 
         let timestamps = {
@@ -248,7 +246,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
         let raw_analysis = read_analyis_incremental(&self.loader, timestamps);
 
-        let result = lowering::lower(raw_analysis, base_dir, full_docs, self, |host, per_crate, path| {
+        let result = lowering::lower(raw_analysis, base_dir, self, |host, per_crate, path| {
             let mut a = host.analysis.lock()?;
             a.as_mut().unwrap().update(per_crate, path);
             Ok(())
@@ -257,7 +255,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     // Reloads the entire project's analysis data.
-    pub fn hard_reload(&self, path_prefix: &Path, base_dir: &Path, full_docs: bool) -> AResult<()> {
+    pub fn hard_reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
         trace!("hard_reload {:?} {:?}", path_prefix, base_dir);
         self.loader.set_path_prefix(path_prefix);
         let raw_analysis = read_analyis_incremental(&self.loader, HashMap::new());
@@ -266,7 +264,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         // then once we're done, we'll swap its data into self.
         let mut fresh_host = self.loader.fresh_host();
         fresh_host.analysis = Mutex::new(Some(Analysis::new()));
-        let lowering_result = lowering::lower(raw_analysis, base_dir, full_docs, &fresh_host, |host, per_crate, path| {
+        let lowering_result = lowering::lower(raw_analysis, base_dir, &fresh_host, |host, per_crate, path| {
             host.analysis.lock().unwrap().as_mut().unwrap().per_crate.insert(path, per_crate);
             Ok(())
         });
