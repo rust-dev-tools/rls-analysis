@@ -9,7 +9,7 @@
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
 use data;
-use raw::{self, Format, RelationKind, };
+use raw::{self, RelationKind};
 use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, Span, NULL, Def, Glob, Id};
 use util;
 
@@ -107,14 +107,9 @@ impl CrateReader {
                                                &mut project_analysis.master_crate_map.lock().unwrap(),
                                                base_dir);
 
-        let mut per_crate = PerCrateAnalysis::new();
+        let mut per_crate = PerCrateAnalysis::new(krate.timestamp);
 
-        let api_crate = krate.analysis.kind == Format::JsonApi;
-        if !api_crate {
-            per_crate.timestamp = Some(krate.timestamp);
-        }
-
-        reader.read_defs(krate.analysis.defs, &mut per_crate, api_crate);
+        reader.read_defs(krate.analysis.defs, &mut per_crate, krate.analysis.config.distro_crate);
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
         reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
@@ -149,23 +144,15 @@ impl CrateReader {
         }
     }
 
-    fn read_defs(&self, defs: Vec<raw::Def>, analysis: &mut PerCrateAnalysis, api_crate: bool) {
-        for mut d in defs {
+    fn read_defs(&self, defs: Vec<raw::Def>, analysis: &mut PerCrateAnalysis, distro_crate: bool) {
+        for d in defs {
             let span = lower_span(&d.span, &self.base_dir);
             let id = self.id_from_compiler_id(&d.id);
             if id != NULL && !analysis.defs.contains_key(&id) {
-                if api_crate {
-                    // TODO gross hack - take me out, and do something better in rustc
-                    // TODO shit, I can't even remember why we do this - it makes no sense :-s
-                    if d.kind == super::raw::DefKind::Struct {
-                        d.value = String::new();
-                    }
-                } else {
-                    let file_name = span.file.clone();
-                    analysis.defs_per_file.entry(file_name).or_insert_with(|| vec![]).push(id);
+                let file_name = span.file.clone();
+                analysis.defs_per_file.entry(file_name).or_insert_with(|| vec![]).push(id);
+                analysis.def_id_for_span.insert(span.clone(), id);
 
-                    analysis.def_id_for_span.insert(span.clone(), id);
-                }
                 analysis.def_names.entry(d.name.clone()).or_insert_with(|| vec![]).push(id);
                 let parent = d.parent.map(|id| self.id_from_compiler_id(&id));
                 if let Some(parent) = parent {
@@ -182,7 +169,7 @@ impl CrateReader {
                     name: d.name,
                     value: d.value,
                     qualname: format!("{}{}", self.crate_name, d.qualname),
-                    api_crate: api_crate,
+                    distro_crate,
                     parent: parent,
                     docs: d.docs,
                     // sig: d.sig.map(|ref s| self.lower_sig(s, &self.base_dir)),

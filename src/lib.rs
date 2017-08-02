@@ -79,13 +79,7 @@ macro_rules! clone_field {
 
 macro_rules! def_span {
     ($analysis: expr, $id: expr) => {
-        $analysis.with_defs_and_then($id, |def| {
-            if def.api_crate {
-                None
-            } else {
-                Some(def.span.clone())
-            }
-        })
+        $analysis.with_defs_and_then($id, |def| Some(def.span.clone()))
     }
 }
 
@@ -501,7 +495,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     fn mk_doc_url(def: &Def, analysis: &Analysis) -> Option<String> {
-        if !def.api_crate {
+        if !def.distro_crate {
             return None;
         }
 
@@ -527,6 +521,10 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     fn mk_src_url(def: &Def, path_prefix: Option<&PathBuf>, analysis: &Analysis) -> Option<String> {
+        if !def.distro_crate {
+            return None;
+        }
+
         let path_prefix = match path_prefix {
             Some(pp) => pp,
             None => return None,
@@ -537,15 +535,11 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             Err(_) => return None,
         };
 
-        if def.api_crate {
-            Some(format!("{}/{}#L{}-L{}",
-                         analysis.src_url_base,
-                         file_path.to_str().unwrap(),
-                         def.span.range.row_start.one_indexed().0,
-                         def.span.range.row_end.one_indexed().0))
-        } else {
-            None
-        }
+        Some(format!("{}/{}#L{}-L{}",
+                     analysis.src_url_base,
+                     file_path.to_str().unwrap(),
+                     def.span.range.row_start.one_indexed().0,
+                     def.span.range.row_end.one_indexed().0))
     }
 }
 
@@ -595,7 +589,7 @@ pub struct PerCrateAnalysis {
 
     name: String,
     root_id: Option<Id>,
-    timestamp: Option<SystemTime>,
+    timestamp: SystemTime,
 }
 
 #[derive(Debug, Clone)]
@@ -604,7 +598,7 @@ pub struct Def {
     pub span: Span,
     pub name: String,
     pub qualname: String,
-    pub api_crate: bool,
+    pub distro_crate: bool,
     pub parent: Option<Id>,
     pub value: String,
     pub docs: String,
@@ -634,7 +628,7 @@ pub struct Glob {
 }
 
 impl PerCrateAnalysis {
-    pub fn new() -> PerCrateAnalysis {
+    pub fn new(timestamp: SystemTime) -> PerCrateAnalysis {
         PerCrateAnalysis {
             def_id_for_span: HashMap::new(),
             defs: HashMap::new(),
@@ -646,7 +640,7 @@ impl PerCrateAnalysis {
             impls: HashMap::new(),
             name: String::new(),
             root_id: None,
-            timestamp: None,
+            timestamp,
         }
     }
 }
@@ -661,7 +655,7 @@ impl Analysis {
         }
     }
 
-    fn timestamps(&self) -> HashMap<PathBuf, Option<SystemTime>> {
+    fn timestamps(&self) -> HashMap<PathBuf, SystemTime> {
         self.per_crate.iter().filter_map(|(s, pc)| s.as_ref().map(|s| (s.clone(), pc.timestamp))).collect()
     }
 

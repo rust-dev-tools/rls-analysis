@@ -8,7 +8,7 @@
 
 use AnalysisLoader;
 use listings::{DirectoryListing, ListingKind};
-pub use data::{Def, DefKind, Ref, CratePreludeData, Signature, SigElement, Import, Format,
+pub use data::{Def, DefKind, Ref, CratePreludeData, Signature, SigElement, Import,
                RelationKind, Relation, SpanData};
 use data::Analysis;
 
@@ -43,7 +43,7 @@ pub struct Crate {
 }
 
 pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
-                                                   timestamps: HashMap<PathBuf, Option<SystemTime>>)
+                                                   timestamps: HashMap<PathBuf, SystemTime>)
                                                    -> Vec<Crate> {
     loader.iter_paths(|p| {
 
@@ -63,13 +63,11 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
                 path.push(&l.name);
 
                 match timestamps.get(&path) {
-                    Some(&Some(ref t)) => {
+                    Some(t) => {
                         if time > t {
                             read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, Some(path))));
                         }
                     }
-                    // A crate we should never need to refresh.
-                    Some(&None) => {}
                     // A crate we've never seen before.
                     None => {
                         read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, Some(path))));
