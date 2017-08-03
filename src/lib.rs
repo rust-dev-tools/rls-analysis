@@ -94,6 +94,19 @@ impl AnalysisHost<CargoAnalysisLoader> {
             loader: CargoAnalysisLoader {
                 path_prefix: Mutex::new(None),
                 target: target,
+                crate_blacklist: &[],
+            }
+        }
+    }
+
+    pub fn new_with_blacklist(target: Target, blacklist: &'static [&'static str]) -> AnalysisHost {
+        AnalysisHost {
+            analysis: Mutex::new(None),
+            master_crate_map: Mutex::new(HashMap::new()),
+            loader: CargoAnalysisLoader {
+                path_prefix: Mutex::new(None),
+                target: target,
+                crate_blacklist: blacklist,
             }
         }
     }

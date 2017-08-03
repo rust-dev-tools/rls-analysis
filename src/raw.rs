@@ -62,6 +62,10 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
                 let mut path = p.to_path_buf();
                 path.push(&l.name);
 
+                if loader.ignore_data(&path) {
+                    continue;
+                }
+
                 match timestamps.get(&path) {
                     Some(t) => {
                         if time > t {

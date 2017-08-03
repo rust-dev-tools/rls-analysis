@@ -17,6 +17,7 @@ use AnalysisHost;
 pub struct CargoAnalysisLoader {
     pub path_prefix: Mutex<Option<PathBuf>>,
     pub target: Target,
+    pub crate_blacklist: &'static [&'static str],
 }
 
 pub trait AnalysisLoader: Sized {
@@ -26,6 +27,9 @@ pub trait AnalysisLoader: Sized {
     fn abs_path_prefix(&self) -> Option<PathBuf>;
     fn iter_paths<F, T>(&self, f: F) -> Vec<T>
         where F: Fn(&Path) -> Vec<T>;
+    fn ignore_data(&self, _path: &Path) -> bool {
+        false
+    }
 }
 
 impl AnalysisLoader for CargoAnalysisLoader {
@@ -39,6 +43,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
         AnalysisHost::new_with_loader(CargoAnalysisLoader {
             path_prefix: Mutex::new(pp.clone()),
             target: self.target,
+            crate_blacklist: self.crate_blacklist,
         })
     }
 
@@ -59,7 +64,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
         let path_prefix = path_prefix.as_ref().unwrap();
         let target = self.target.to_string();
 
-        // TODO deps path allows to break out of 'sandbox' - is that Ok?
+        // TODO sys_root_path allows to break out of 'sandbox' - is that Ok?
         let principle_path = path_prefix.join("target").join("rls").join(&target).join("save-analysis");
         let deps_path = path_prefix.join("target").join("rls").join(&target).join("deps").join("save-analysis");
         let sys_root_path = sys_root_path();
@@ -74,6 +79,20 @@ impl AnalysisLoader for CargoAnalysisLoader {
                       &principle_path];
 
         paths.iter().flat_map(|p| f(p).into_iter()).collect()
+    }
+
+    // Ignore a file if its name is on the blacklist.
+    fn ignore_data(&self, path: &Path) -> bool {
+        let file_name = match path.file_name() {
+            Some(f) => f.to_str().expect("Couldn't convert file name to string"),
+            None => return false,
+        };
+        for bl in self.crate_blacklist {
+            if file_name.starts_with(&format!("lib{}-", bl)) {
+                return true;
+            }
+        }
+        false
     }
 }
 
