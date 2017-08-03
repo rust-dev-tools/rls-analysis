@@ -14,6 +14,7 @@ use std::sync::Mutex;
 use raw::Target;
 use AnalysisHost;
 
+#[derive(Debug)]
 pub struct CargoAnalysisLoader {
     pub path_prefix: Mutex<Option<PathBuf>>,
     pub target: Target,

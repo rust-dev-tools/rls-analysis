@@ -35,7 +35,7 @@ impl fmt::Display for Target {
     }
 }
 
-#[derive(new)]
+#[derive(Debug, new)]
 pub struct Crate {
     pub analysis: Analysis,
     pub timestamp: SystemTime,
