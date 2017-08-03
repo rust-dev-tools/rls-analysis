@@ -8,9 +8,11 @@
 
 // For processing the raw save-analysis data from rustc into rustw's in-memory representation.
 
+use analysis::{PerCrateAnalysis, Def, Glob};
 use data;
 use raw::{self, RelationKind};
-use super::{AnalysisHost, AnalysisLoader, PerCrateAnalysis, AResult, Span, NULL, Def, Glob, Id};
+use {AnalysisHost, AResult, Span, NULL, Id};
+use loader::AnalysisLoader;
 use util;
 
 use span;

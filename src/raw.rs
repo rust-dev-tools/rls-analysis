@@ -83,10 +83,6 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
     })
 }
 
-pub fn read_analysis<L: AnalysisLoader>(loader: &L) -> Vec<Crate> {
-    read_analyis_incremental(loader, HashMap::new())
-}
-
 fn read_crate_data(path: &Path) -> Option<Analysis> {
     info!("read_crate_data {:?}", path);
     // TODO unwraps
