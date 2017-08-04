@@ -78,6 +78,8 @@ pub struct Id(u64);
 // Used to indicate a missing index in the Id.
 pub const NULL: Id = Id(u64::max_value());
 
+type Blacklist<'a> = &'a [&'static str];
+
 macro_rules! clone_field {
     ($field: ident) => { |x| x.$field.clone() }
 }
@@ -96,19 +98,6 @@ impl AnalysisHost<CargoAnalysisLoader> {
             loader: CargoAnalysisLoader {
                 path_prefix: Mutex::new(None),
                 target: target,
-                crate_blacklist: &[],
-            }
-        }
-    }
-
-    pub fn new_with_blacklist(target: Target, blacklist: &'static [&'static str]) -> AnalysisHost {
-        AnalysisHost {
-            analysis: Mutex::new(None),
-            master_crate_map: Mutex::new(HashMap::new()),
-            loader: CargoAnalysisLoader {
-                path_prefix: Mutex::new(None),
-                target: target,
-                crate_blacklist: blacklist,
             }
         }
     }
@@ -129,9 +118,10 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     pub fn reload_from_analysis(&self,
                                 analysis: data::Analysis,
                                 path_prefix: &Path,
-                                base_dir: &Path)
+                                base_dir: &Path,
+                                blacklist: Blacklist)
                                 -> AResult<()> {
-        self.reload(path_prefix, base_dir)?;
+        self.reload_with_blacklist(path_prefix, base_dir, blacklist)?;
 
         lowering::lower(vec![raw::Crate::new(analysis, SystemTime::now(), None)],
                         base_dir,
@@ -144,13 +134,17 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     pub fn reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
-        trace!("reload {:?} {:?}", path_prefix, base_dir);
+        self.reload_with_blacklist(path_prefix, base_dir, &[])
+    }
+
+    pub fn reload_with_blacklist(&self, path_prefix: &Path, base_dir: &Path, blacklist: Blacklist) -> AResult<()> {
+        trace!("reload_with_blacklist {:?} {:?} {:?}", path_prefix, base_dir, blacklist);
         let empty = {
             let a = self.analysis.lock()?;
             a.is_none()
         };
         if empty || self.loader.needs_hard_reload(path_prefix) {
-            return self.hard_reload(path_prefix, base_dir);
+            return self.hard_reload_with_blacklist(path_prefix, base_dir, blacklist);
         }
 
         let timestamps = {
@@ -158,7 +152,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             a.as_ref().unwrap().timestamps()
         };
 
-        let raw_analysis = read_analyis_incremental(&self.loader, timestamps);
+        let raw_analysis = read_analyis_incremental(&self.loader, timestamps, blacklist);
 
         let result = lowering::lower(raw_analysis, base_dir, self, |host, per_crate, path| {
             let mut a = host.analysis.lock()?;
@@ -170,9 +164,13 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     // Reloads the entire project's analysis data.
     pub fn hard_reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
+        self.hard_reload_with_blacklist(path_prefix, base_dir, &[])
+    }
+
+    pub fn hard_reload_with_blacklist(&self, path_prefix: &Path, base_dir: &Path, blacklist: Blacklist) -> AResult<()> {
         trace!("hard_reload {:?} {:?}", path_prefix, base_dir);
         self.loader.set_path_prefix(path_prefix);
-        let raw_analysis = read_analyis_incremental(&self.loader, HashMap::new());
+        let raw_analysis = read_analyis_incremental(&self.loader, HashMap::new(), blacklist);
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.

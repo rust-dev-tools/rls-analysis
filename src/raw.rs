@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use AnalysisLoader;
+use {AnalysisLoader, Blacklist};
 use listings::{DirectoryListing, ListingKind};
 pub use data::{Def, DefKind, Ref, CratePreludeData, Signature, SigElement, Import,
                RelationKind, Relation, SpanData};
@@ -43,10 +43,10 @@ pub struct Crate {
 }
 
 pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
-                                                   timestamps: HashMap<PathBuf, SystemTime>)
+                                                   timestamps: HashMap<PathBuf, SystemTime>,
+                                                   crate_blacklist: Blacklist)
                                                    -> Vec<Crate> {
     loader.iter_paths(|p| {
-
         let t = Instant::now();
 
         let mut result = vec![];
@@ -62,7 +62,7 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
                 let mut path = p.to_path_buf();
                 path.push(&l.name);
 
-                if loader.ignore_data(&path) {
+                if ignore_data(&l.name, crate_blacklist) {
                     continue;
                 }
 
@@ -87,8 +87,18 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
     })
 }
 
+fn ignore_data(file_name: &str, crate_blacklist: Blacklist) -> bool {
+    for bl in crate_blacklist {
+        if file_name.starts_with(&format!("lib{}-", bl)) {
+            return true;
+        }
+    }
+    false
+}
+
+
 fn read_crate_data(path: &Path) -> Option<Analysis> {
-    info!("read_crate_data {:?}", path);
+    trace!("read_crate_data {:?}", path);
     // TODO unwraps
     let t = Instant::now();
     let mut file = File::open(&path).unwrap();
