@@ -26,7 +26,8 @@ mod util;
 #[cfg(test)]
 mod test;
 
-use analysis::{Analysis, Def};
+pub use analysis::Def;
+use analysis::Analysis;
 pub use raw::{Target, name_space_for_def_kind, read_analyis_incremental, DefKind};
 pub use loader::{AnalysisLoader, CargoAnalysisLoader};
 
