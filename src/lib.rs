@@ -27,7 +27,7 @@ mod util;
 mod test;
 
 use analysis::{Analysis, Def};
-pub use raw::{Target, name_space_for_def_kind, read_analyis_incremental};
+pub use raw::{Target, name_space_for_def_kind, read_analyis_incremental, DefKind};
 pub use loader::{AnalysisLoader, CargoAnalysisLoader};
 
 use std::collections::HashMap;
