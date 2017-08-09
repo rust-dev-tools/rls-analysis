@@ -25,15 +25,15 @@ impl AnalysisLoader for TestAnalysisLoader {
         AnalysisHost::new_with_loader(self.clone())
     }
 
-    fn set_path_prefix(&self, _path_prefix: &Path) {
-    }
+    fn set_path_prefix(&self, _path_prefix: &Path) {}
 
     fn abs_path_prefix(&self) -> Option<PathBuf> {
         panic!();
     }
 
     fn iter_paths<F, T>(&self, f: F) -> Vec<T>
-        where F: Fn(&Path) -> Vec<T>
+    where
+        F: Fn(&Path) -> Vec<T>,
     {
         let paths = &[&self.path];
         paths.iter().flat_map(|p| f(p).into_iter()).collect()
@@ -44,15 +44,27 @@ impl AnalysisLoader for TestAnalysisLoader {
 #[test]
 fn smoke() {
     // Read in test data and lower it, check we don't crash.
-    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(Path::new("test_data/rls-analysis").to_owned()));
-    host.reload(Path::new("test_data/rls-analysis"), Path::new("test_data/rls-analysis"), false).unwrap();
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/rls-analysis").to_owned(),
+    ));
+    host.reload(
+        Path::new("test_data/rls-analysis"),
+        Path::new("test_data/rls-analysis"),
+        false,
+    ).unwrap();
 }
 
 #[test]
 fn test_hello() {
     // Simple program, a somewhat thorough test that we have all the defs and refs we expect.
-    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(Path::new("test_data/hello/save-analysis").to_owned()));
-    host.reload(Path::new("test_data/hello"), Path::new("test_data/hello"), false).unwrap();
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/hello/save-analysis").to_owned(),
+    ));
+    host.reload(
+        Path::new("test_data/hello"),
+        Path::new("test_data/hello"),
+        false,
+    ).unwrap();
 
     let ids = host.search_for_id("print_hello").unwrap();
     assert_eq!(ids.len(), 1);
@@ -115,8 +127,14 @@ fn test_hello() {
 #[test]
 fn test_types() {
     // TODO test unit structs, structs with fields, enums, aliases, traits, etc.
-    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(Path::new("test_data/types/save-analysis").to_owned()));
-    host.reload(Path::new("test_data/types"), Path::new("test_data/types"), false).unwrap();
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/types/save-analysis").to_owned(),
+    ));
+    host.reload(
+        Path::new("test_data/types"),
+        Path::new("test_data/types"),
+        false,
+    ).unwrap();
 
     let ids = host.search_for_id("Foo").unwrap();
     assert_eq!(ids.len(), 1);

@@ -106,7 +106,10 @@ impl Analysis {
     }
 
     pub fn timestamps(&self) -> HashMap<PathBuf, SystemTime> {
-        self.per_crate.iter().filter_map(|(s, pc)| s.as_ref().map(|s| (s.clone(), pc.timestamp))).collect()
+        self.per_crate
+            .iter()
+            .filter_map(|(s, pc)| s.as_ref().map(|s| (s.clone(), pc.timestamp)))
+            .collect()
     }
 
     pub fn update(&mut self, per_crate: PerCrateAnalysis, path: Option<PathBuf>) {
@@ -114,11 +117,13 @@ impl Analysis {
     }
 
     pub fn has_def(&self, id: Id) -> bool {
-        self.for_each_crate(|c| c.defs.get(&id).map(|_| ())).is_some()
+        self.for_each_crate(|c| c.defs.get(&id).map(|_| ()))
+            .is_some()
     }
 
     pub fn for_each_crate<F, T>(&self, f: F) -> Option<T>
-        where F: Fn(&PerCrateAnalysis) -> Option<T>
+    where
+        F: Fn(&PerCrateAnalysis) -> Option<T>,
     {
         for per_crate in self.per_crate.values() {
             if let Some(t) = f(per_crate) {
@@ -130,7 +135,8 @@ impl Analysis {
     }
 
     pub fn for_all_crates<F, T>(&self, f: F) -> Vec<T>
-        where F: Fn(&PerCrateAnalysis) -> Option<Vec<T>>
+    where
+        F: Fn(&PerCrateAnalysis) -> Option<Vec<T>>,
     {
         let mut result = vec![];
         for per_crate in self.per_crate.values() {
@@ -147,35 +153,44 @@ impl Analysis {
     }
 
     pub fn with_defs<F, T>(&self, id: Id, f: F) -> Option<T>
-        where F: Fn(&Def) -> T
+    where
+        F: Fn(&Def) -> T,
     {
         self.for_each_crate(|c| c.defs.get(&id).map(&f))
     }
 
     pub fn with_defs_and_then<F, T>(&self, id: Id, f: F) -> Option<T>
-        where F: Fn(&Def) -> Option<T>
+    where
+        F: Fn(&Def) -> Option<T>,
     {
         self.for_each_crate(|c| c.defs.get(&id).and_then(&f))
     }
 
     pub fn with_globs<F, T>(&self, span: &Span, f: F) -> Option<T>
-        where F: Fn(&Glob) -> T
+    where
+        F: Fn(&Glob) -> T,
     {
         self.for_each_crate(|c| c.globs.get(span).map(&f))
     }
 
     pub fn for_each_child<F, T>(&self, id: Id, mut f: F) -> Option<Vec<T>>
-        where F: FnMut(Id, &Def) -> T
+    where
+        F: FnMut(Id, &Def) -> T,
     {
         for per_crate in self.per_crate.values() {
             if let Some(children) = per_crate.children.get(&id) {
-                return Some(children.iter().filter_map(|id| {
-                    let def = per_crate.defs.get(id);
-                    if def.is_none() {
-                        info!("def not found for {}", id);
-                    }
-                    def.map(|def| f(*id, &def))
-                }).collect());
+                return Some(
+                    children
+                        .iter()
+                        .filter_map(|id| {
+                            let def = per_crate.defs.get(id);
+                            if def.is_none() {
+                                info!("def not found for {}", id);
+                            }
+                            def.map(|def| f(*id, &def))
+                        })
+                        .collect(),
+                );
             }
         }
 
@@ -183,19 +198,22 @@ impl Analysis {
     }
 
     pub fn with_ref_spans<F, T>(&self, id: Id, f: F) -> Option<T>
-        where F: Fn(&Vec<Span>) -> T
+    where
+        F: Fn(&Vec<Span>) -> T,
     {
         self.for_each_crate(|c| c.ref_spans.get(&id).map(&f))
     }
 
     pub fn with_defs_per_file<F, T>(&self, file: &Path, f: F) -> Option<T>
-        where F: Fn(&Vec<Id>) -> T
+    where
+        F: Fn(&Vec<Id>) -> T,
     {
         self.for_each_crate(|c| c.defs_per_file.get(file).map(&f))
     }
 
     pub fn with_def_names<F, T>(&self, name: &str, f: F) -> Vec<T>
-        where F: Fn(&Vec<Id>) -> Vec<T>
+    where
+        F: Fn(&Vec<Id>) -> Vec<T>,
     {
         self.for_all_crates(|c| c.def_names.get(name).map(&f))
     }

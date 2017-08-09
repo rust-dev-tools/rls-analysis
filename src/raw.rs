@@ -8,8 +8,8 @@
 
 use {AnalysisLoader, Blacklist};
 use listings::{DirectoryListing, ListingKind};
-pub use data::{Def, DefKind, Ref, CratePreludeData, Signature, SigElement, Import,
-               RelationKind, Relation, SpanData};
+pub use data::{CratePreludeData, Def, DefKind, Import, Ref, Relation, RelationKind, SigElement,
+               Signature, SpanData};
 use data::Analysis;
 
 
@@ -18,7 +18,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, Instant};
+use std::time::{Instant, SystemTime};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -42,10 +42,11 @@ pub struct Crate {
     pub path: Option<PathBuf>,
 }
 
-pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
-                                                   timestamps: HashMap<PathBuf, SystemTime>,
-                                                   crate_blacklist: Blacklist)
-                                                   -> Vec<Crate> {
+pub fn read_analyis_incremental<L: AnalysisLoader>(
+    loader: &L,
+    timestamps: HashMap<PathBuf, SystemTime>,
+    crate_blacklist: Blacklist,
+) -> Vec<Crate> {
     loader.iter_paths(|p| {
         let t = Instant::now();
 
@@ -53,7 +54,9 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
 
         let listing = match DirectoryListing::from_path(p) {
             Ok(l) => l,
-            Err(_) => { return result; },
+            Err(_) => {
+                return result;
+            }
         };
 
         for l in listing.files {
@@ -67,21 +70,27 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(loader: &L,
                 }
 
                 match timestamps.get(&path) {
-                    Some(t) => {
-                        if time > t {
-                            read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, Some(path))));
-                        }
-                    }
+                    Some(t) => if time > t {
+                        read_crate_data(&path)
+                            .map(|a| result.push(Crate::new(a, *time, Some(path))));
+                    },
                     // A crate we've never seen before.
                     None => {
-                        read_crate_data(&path).map(|a| result.push(Crate::new(a, *time, Some(path))));
+                        read_crate_data(&path)
+                            .map(|a| result.push(Crate::new(a, *time, Some(path))));
                     }
                 }
             }
         }
 
         let d = t.elapsed();
-        info!("reading {} crates from {} in {}.{:09}s", result.len(), p.display(), d.as_secs(), d.subsec_nanos());
+        info!(
+            "reading {} crates from {} in {}.{:09}s",
+            result.len(),
+            p.display(),
+            d.as_secs(),
+            d.subsec_nanos()
+        );
 
         result
     })
@@ -107,7 +116,12 @@ fn read_crate_data(path: &Path) -> Option<Analysis> {
     let s = ::rustc_serialize::json::decode(&buf);
 
     let d = t.elapsed();
-    info!("reading {:?} {}.{:09}s", path, d.as_secs(), d.subsec_nanos());
+    info!(
+        "reading {:?} {}.{:09}s",
+        path,
+        d.as_secs(),
+        d.subsec_nanos()
+    );
 
     if let Err(ref e) = s {
         info!("deserialisation error: {:?}", e);
