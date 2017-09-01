@@ -45,7 +45,7 @@ pub struct AnalysisHost<L: AnalysisLoader = CargoAnalysisLoader> {
 
 pub type AResult<T> = Result<T, AError>;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AError {
     MutexPoison,
     Unclassified,
@@ -469,17 +469,37 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         }
 
         match def.parent {
-            Some(p) => analysis.with_defs(p, |parent| {
-                let parent_qualpath = parent.qualname.replace("::", "/");
-                let ns = name_space_for_def_kind(def.kind);
-                format!(
-                    "{}/{}.t.html#{}.{}",
-                    analysis.doc_url_base,
-                    parent_qualpath,
-                    def.name,
-                    ns
-                )
-            }),
+            Some(p) => {
+                analysis.with_defs(p, |parent| match def.kind {
+                    DefKind::Field | DefKind::Method | DefKind::Tuple => {
+                        let ns = name_space_for_def_kind(def.kind);
+                        let mut res = AnalysisHost::<L>::mk_doc_url(&parent, analysis)
+                            .unwrap_or_else(|| "".into());
+                        res.push_str(&format!("#{}.{}", def.name, ns));
+                        res
+                    }
+                    DefKind::Mod => {
+                        let parent_qualpath = parent.qualname.replace("::", "/");
+                        format!(
+                            "{}/{}/{}/",
+                            analysis.doc_url_base,
+                            parent_qualpath.trim_right_matches('/'),
+                            def.name,
+                        )
+                    }
+                    _ => {
+                        let parent_qualpath = parent.qualname.replace("::", "/");
+                        let ns = name_space_for_def_kind(def.kind);
+                        format!(
+                            "{}/{}/{}.{}.html",
+                            analysis.doc_url_base,
+                            parent_qualpath,
+                            def.name,
+                            ns,
+                        )
+                    }
+                })
+            }
             None => {
                 let qualpath = def.qualname.replace("::", "/");
                 let ns = name_space_for_def_kind(def.kind);
@@ -487,7 +507,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                     "{}/{}.{}.html",
                     analysis.doc_url_base,
                     qualpath,
-                    ns
+                    ns,
                 ))
             }
         }
