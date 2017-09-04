@@ -50,7 +50,6 @@ fn smoke() {
     host.reload(
         Path::new("test_data/rls-analysis"),
         Path::new("test_data/rls-analysis"),
-        false,
     ).unwrap();
 }
 
@@ -63,7 +62,6 @@ fn test_hello() {
     host.reload(
         Path::new("test_data/hello"),
         Path::new("test_data/hello"),
-        false,
     ).unwrap();
 
     let ids = host.search_for_id("print_hello").unwrap();
@@ -133,7 +131,6 @@ fn test_types() {
     host.reload(
         Path::new("test_data/types"),
         Path::new("test_data/types"),
-        false,
     ).unwrap();
 
     let ids = host.search_for_id("Foo").unwrap();
