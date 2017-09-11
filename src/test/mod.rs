@@ -40,6 +40,115 @@ impl AnalysisLoader for TestAnalysisLoader {
     }
 }
 
+#[test]
+fn doc_urls_resolve_correctly() {
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/rust-analysis").to_owned(),
+    ));
+    host.reload(
+        Path::new("test_data/rust-analysis"),
+        Path::new("test_data/rust-analysis"),
+    ).unwrap();
+
+    fn assert_url_for_type<S: Into<Option<&'static str>>>(
+        host: &AnalysisHost<TestAnalysisLoader>,
+        type_: &str,
+        qualname: S,
+        url: &str,
+    ) {
+        let qualname = qualname.into();
+        let ids = host.search_for_id(type_).unwrap();
+        let defs: Vec<_> = ids.into_iter()
+            .map(|id| host.get_def(id).unwrap())
+            .filter(|def| {
+                qualname.is_none() || def.qualname == qualname.unwrap()
+            })
+            .collect();
+        println!("{:#?}", defs);
+        assert_eq!(defs.len(), 1);
+        assert_eq!(host.doc_url(&defs[0].span), Ok(url.into()));
+    }
+
+    // FIXME This test cannot work for some values
+    // Primitives like i64. i64 is shown with type mod but requires name "primitive".
+    // All methods (instead of trait methods, see as_mut), seem to only be available for generic qualname
+    // Unions like ManuallyDrop are not in the analysis file, just methods implemented for them or methods using them
+
+    assert_url_for_type(
+        &host,
+        "MAIN_SEPARATOR",
+        None,
+        "https://doc.rust-lang.org/nightly/std/path/MAIN_SEPARATOR.v.html",
+    );
+    // the parent has a qualname which is not represented in the usage, the ip part
+    assert_url_for_type(
+        &host,
+        "Ipv4Addr",
+        None,
+        "https://doc.rust-lang.org/nightly/std/net/ip/Ipv4Addr.t.html",
+    );
+    assert_url_for_type(
+        &host,
+        "VarError",
+        None,
+        "https://doc.rust-lang.org/nightly/std/env/VarError.t.html",
+    );
+    assert_url_for_type(
+        &host,
+        "NotPresent",
+        None,
+        "https://doc.rust-lang.org/nightly/std/env/VarError.t.html#NotPresent.v",
+    );
+    assert_url_for_type(
+        &host,
+        "Result",
+        "std::thread::Result",
+        "https://doc.rust-lang.org/nightly/std/thread/Result.t.html",
+    );
+    assert_url_for_type(
+        &host,
+        "args",
+        "std::env::args",
+        "https://doc.rust-lang.org/nightly/std/env/args.v.html",
+    );
+    assert_url_for_type(
+        &host,
+        "AsciiExt",
+        None,
+        "https://doc.rust-lang.org/nightly/std/ascii/AsciiExt.t.html",
+    );
+    assert_url_for_type(
+        &host,
+        "is_ascii",
+        None,
+        "https://doc.rust-lang.org/nightly/std/ascii/AsciiExt.t.html#is_ascii.v",
+    );
+    assert_url_for_type(
+        &host,
+        "status",
+        "std::process::Output::status",
+        "https://doc.rust-lang.org/nightly/std/process/Output.t.html#status.v",
+    );
+    assert_url_for_type(
+        &host,
+        "copy",
+        "std::fs::copy",
+        "https://doc.rust-lang.org/nightly/std/fs/copy.v.html",
+    );
+    // prelude and fs are both mod, but the parent once has a trailing / and once not
+    assert_url_for_type(
+        &host,
+        "prelude",
+        "std::io::prelude",
+        "https://doc.rust-lang.org/nightly/std/io/prelude/",
+    );
+    assert_url_for_type(
+        &host,
+        "fs",
+        "std::fs",
+        "https://doc.rust-lang.org/nightly/std/fs/",
+    );
+}
 
 #[test]
 fn smoke() {
