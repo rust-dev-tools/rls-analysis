@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::iter::Extend;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use std::u32;
 
 // f is a function used to record the lowered crate into analysis.
 pub fn lower<F, L>(
@@ -336,7 +337,7 @@ impl CrateReader {
     // }
 
     fn id_from_compiler_id(&self, id: &data::Id) -> Id {
-        if id.krate == u32::max_value() || id.index == u32::max_value() {
+        if id.krate == u32::MAX || id.index == u32::MAX {
             return NULL;
         }
         // We build an id by looking up the local crate number into a global crate number and using
