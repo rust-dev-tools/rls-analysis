@@ -6,7 +6,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(const_fn)]
 #![feature(type_ascription)]
 
 #[macro_use]
@@ -35,6 +34,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
+use std::u64;
 
 #[derive(Debug)]
 pub struct AnalysisHost<L: AnalysisLoader = CargoAnalysisLoader> {
@@ -76,7 +76,7 @@ pub type Span = span::Span<span::ZeroIndexed>;
 pub struct Id(u64);
 
 // Used to indicate a missing index in the Id.
-pub const NULL: Id = Id(u64::max_value());
+pub const NULL: Id = Id(u64::MAX);
 
 type Blacklist<'a> = &'a [&'static str];
 
