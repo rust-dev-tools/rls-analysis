@@ -1,6 +1,6 @@
 [root]
 name = "rls-analysis"
-version = "0.6.6"
+version = "0.6.7"
 dependencies = [
  "derive-new 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
