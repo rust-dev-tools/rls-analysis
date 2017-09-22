@@ -191,6 +191,12 @@ fn test_hello() {
     assert_eq!(refs[0].range.row_start.0, 0);
     assert_eq!(refs[1].file, Path::new("test_data/hello/src/main.rs"));
     assert_eq!(refs[1].range.row_start.0, 6);
+    let defs = host.name_defs("print_hello").unwrap();
+    assert_eq!(defs.len(), 1);
+    let hello_def = &defs[0];
+    assert_eq!(hello_def.name, "print_hello");
+    assert_eq!(hello_def.kind, DefKind::Function);
+    assert_eq!(hello_def.span.range.row_start.0 , 0);
 
     let ids = host.search_for_id("main").unwrap();
     assert_eq!(ids.len(), 1);
@@ -206,6 +212,12 @@ fn test_hello() {
     assert_eq!(refs.len(), 1);
     assert_eq!(refs[0].file, Path::new("test_data/hello/src/main.rs"));
     assert_eq!(refs[0].range.row_start.0, 5);
+    let defs = host.name_defs("main").unwrap();
+    assert_eq!(defs.len(), 1);
+    let main_def = &defs[0];
+    assert_eq!(main_def.name, "main");
+    assert_eq!(main_def.kind, DefKind::Function);
+    assert_eq!(main_def.span.range.row_start.0 , 5);
 
     let ids = host.search_for_id("name").unwrap();
     assert_eq!(ids.len(), 1);
@@ -225,6 +237,12 @@ fn test_hello() {
     assert_eq!(refs[0].range.row_start.0, 1);
     assert_eq!(refs[1].file, Path::new("test_data/hello/src/main.rs"));
     assert_eq!(refs[1].range.row_start.0, 2);
+    let defs = host.name_defs("name").unwrap();
+    assert_eq!(defs.len(), 1);
+    let name_def = &defs[0];
+    assert_eq!(name_def.name, "name");
+    assert_eq!(name_def.kind, DefKind::Local);
+    assert_eq!(name_def.span.range.row_start.0 , 1);
 }
 
 // TODO

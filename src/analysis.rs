@@ -211,6 +211,16 @@ impl Analysis {
         self.for_each_crate(|c| c.defs_per_file.get(file).map(&f))
     }
 
+    pub fn defs_for_name(&self, name: &str) -> Vec<Def> {
+        self.for_all_crates(|c| {
+            c.def_names.get(name).map(|ids| {
+                ids.into_iter()
+                    .flat_map(|id| c.defs.get(id).map(|def| def.clone()))
+                    .collect()
+            })
+        })
+    }
+
     pub fn with_def_names<F, T>(&self, name: &str, f: F) -> Vec<T>
     where
         F: Fn(&Vec<Id>) -> Vec<T>,
