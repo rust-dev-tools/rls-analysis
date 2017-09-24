@@ -346,6 +346,23 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         })
     }
 
+    pub fn name_defs(&self, name: &str) -> AResult<Vec<Def>> {
+        let t_start = Instant::now();
+        let result = self.with_analysis(|a| {
+            let defs = a.defs_for_name(name);
+            info!("defs_for_name {:?}", &defs);
+            Some(defs)
+        });
+
+        let time = t_start.elapsed();
+        info!(
+            "name_defs: {}",
+            time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0
+        );
+
+        result
+    }
+
     /// Search for a symbol name, returns a list of spans matching defs and refs
     /// for that name.
     pub fn search(&self, name: &str) -> AResult<Vec<Span>> {
