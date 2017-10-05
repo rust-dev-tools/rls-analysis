@@ -196,7 +196,7 @@ fn test_hello() {
     let hello_def = &defs[0];
     assert_eq!(hello_def.name, "print_hello");
     assert_eq!(hello_def.kind, DefKind::Function);
-    assert_eq!(hello_def.span.range.row_start.0 , 0);
+    assert_eq!(hello_def.span.range.row_start.0, 0);
 
     let ids = host.search_for_id("main").unwrap();
     assert_eq!(ids.len(), 1);
@@ -217,7 +217,7 @@ fn test_hello() {
     let main_def = &defs[0];
     assert_eq!(main_def.name, "main");
     assert_eq!(main_def.kind, DefKind::Function);
-    assert_eq!(main_def.span.range.row_start.0 , 5);
+    assert_eq!(main_def.span.range.row_start.0, 5);
 
     let ids = host.search_for_id("name").unwrap();
     assert_eq!(ids.len(), 1);
@@ -242,7 +242,7 @@ fn test_hello() {
     let name_def = &defs[0];
     assert_eq!(name_def.name, "name");
     assert_eq!(name_def.kind, DefKind::Local);
-    assert_eq!(name_def.span.range.row_start.0 , 1);
+    assert_eq!(name_def.span.range.row_start.0, 1);
 }
 
 // TODO
@@ -251,33 +251,49 @@ fn test_hello() {
 
 #[test]
 fn test_types() {
-    // TODO test unit structs, structs with fields, enums, aliases, traits, etc.
+    fn assert_type(
+        host: &AnalysisHost<TestAnalysisLoader>,
+        name: &str,
+        def_kind: DefKind,
+        expect_lines: &[u32],
+    ) {
+        let ids = host.search_for_id(name).unwrap();
+        println!("name: {}", name);
+        assert_eq!(ids.len(), 1);
+
+        let id = ids[0];
+        let def = host.get_def(id).unwrap();
+        assert_eq!(def.name, name);
+        assert_eq!(def.kind, def_kind);
+
+        let refs = host.find_all_refs_by_id(id).unwrap();
+        assert_eq!(refs.len(), expect_lines.len());
+        println!("{:?}", refs);
+
+        for (i, start) in expect_lines.iter().enumerate() {
+            assert_eq!(refs[i].file, Path::new("test_data/types/src/main.rs"));
+            assert_eq!(refs[i].range.row_start.0 + 1, *start);
+        }
+    }
+
     let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
         Path::new("test_data/types/save-analysis").to_owned(),
     ));
-    host.reload(
-        Path::new("test_data/types"),
-        Path::new("test_data/types"),
-    ).unwrap();
+    host.reload(Path::new("test_data/types"), Path::new("test_data/types"))
+        .unwrap();
 
-    let ids = host.search_for_id("Foo").unwrap();
-    assert_eq!(ids.len(), 1);
-    let id = ids[0];
-    let def = host.get_def(id).unwrap();
-    assert_eq!(def.name, "Foo");
-    assert_eq!(def.kind, DefKind::Struct);
-
-    let refs = host.find_all_refs_by_id(id).unwrap();
-    println!("{:?}", refs);
-    assert_eq!(refs.len(), 5);
-    assert_eq!(refs[0].file, Path::new("test_data/types/src/main.rs"));
-    assert_eq!(refs[0].range.row_start.0, 0);
-    assert_eq!(refs[1].file, Path::new("test_data/types/src/main.rs"));
-    assert_eq!(refs[1].range.row_start.0, 5);
-    assert_eq!(refs[2].file, Path::new("test_data/types/src/main.rs"));
-    assert_eq!(refs[2].range.row_start.0, 6);
-    assert_eq!(refs[3].file, Path::new("test_data/types/src/main.rs"));
-    assert_eq!(refs[3].range.row_start.0, 9);
-    assert_eq!(refs[4].file, Path::new("test_data/types/src/main.rs"));
-    assert_eq!(refs[4].range.row_start.0, 9);
+    assert_type(&host, "Foo", DefKind::Struct, &[1, 6, 7, 10, 10]);
+    assert_type(&host, "f", DefKind::Field, &[2, 6]);
+    assert_type(&host, "main", DefKind::Function, &[5]);
+    assert_type(&host, "test_binding", DefKind::Local, &[11]);
+    assert_type(&host, "TEST_CONST", DefKind::Const, &[12]);
+    assert_type(&host, "TEST_STATIC", DefKind::Static, &[13]);
+    assert_type(&host, "test_module", DefKind::Mod, &[17]);
+    assert_type(&host, "TestType", DefKind::Type, &[18]);
+    assert_type(&host, "TestTrait", DefKind::Trait, &[25]);
+    assert_type(&host, "test_method", DefKind::Method, &[26]);
+    assert_type(&host, "FooEnum", DefKind::Enum, &[29]);
+    // TODO: TupleVariant and StructVariant DefKind when rustc uses rls-data 0.11
+    assert_type(&host, "TupleVariant", DefKind::Tuple, &[30]);
+    assert_type(&host, "StructVariant", DefKind::Struct, &[31]);
 }
