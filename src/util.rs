@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#[cfg(unix)]
 macro_rules! option_try(
     ($e:expr) => (match $e { Some(e) => e, None => return None })
 );
