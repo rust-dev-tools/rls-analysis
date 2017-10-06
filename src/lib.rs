@@ -446,7 +446,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         })
     }
 
-    // e.g., https://github.com/rust-lang/rust/blob/master/src/libcollections/string.rs#L261-L263
+    // e.g., https://github.com/rust-lang/rust/blob/master/src/liballoc/string.rs#L261-L263
     pub fn src_url(&self, span: &Span) -> AResult<String> {
         // FIXME would be nice not to do this every time.
         let path_prefix = &self.loader.abs_path_prefix();
@@ -535,15 +535,8 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             return None;
         }
 
-        let path_prefix = match path_prefix {
-            Some(pp) => pp,
-            None => return None,
-        };
         let file_path = &def.span.file;
-        let file_path = match file_path.strip_prefix(&path_prefix) {
-            Ok(p) => p,
-            Err(_) => return None,
-        };
+        let file_path = file_path.strip_prefix(path_prefix?).ok()?;
 
         Some(format!(
             "{}/{}#L{}-L{}",

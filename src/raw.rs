@@ -70,12 +70,10 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(
                 }
 
                 match timestamps.get(&path) {
-                    Some(t) => if time > t {
-                        read_crate_data(&path)
-                            .map(|a| result.push(Crate::new(a, *time, Some(path))));
-                    },
-                    // A crate we've never seen before.
-                    None => {
+                    // We have fresher data than what we can read.
+                    Some(t) => if time <= t {},
+                    // We have old data or it's a crate we've never seen before.
+                    _ => {
                         read_crate_data(&path)
                             .map(|a| result.push(Crate::new(a, *time, Some(path))));
                     }
@@ -105,14 +103,21 @@ fn ignore_data(file_name: &str, crate_blacklist: Blacklist) -> bool {
     false
 }
 
+fn read_file_contents(path: &Path) -> Result<String, ::std::io::Error> {
+    let mut file = File::open(&path)?;
+    let mut buf = String::new();
+    file.read_to_string(&mut buf)?;
+    Ok(buf)
+}
 
 fn read_crate_data(path: &Path) -> Option<Analysis> {
     trace!("read_crate_data {:?}", path);
-    // TODO unwraps
     let t = Instant::now();
-    let mut file = File::open(&path).unwrap();
-    let mut buf = String::new();
-    file.read_to_string(&mut buf).unwrap();
+
+    let buf = read_file_contents(path).or_else(|err| {
+        info!("couldn't read file: {}", err);
+        Err(err)
+    }).ok()?;
     let s = ::rustc_serialize::json::decode(&buf);
 
     let d = t.elapsed();

@@ -341,7 +341,7 @@ impl CrateReader {
             return NULL;
         }
         // We build an id by looking up the local crate number into a global crate number and using
-        // that for the  high order bits, then use the index for the least significant bits.
+        // that for the high order bits, then use the index for the least significant bits.
 
         let krate = self.crate_map[id.krate as usize] as u64;
 
