@@ -42,7 +42,7 @@ pub struct Crate {
     pub path: Option<PathBuf>,
 }
 
-pub fn read_analyis_incremental<L: AnalysisLoader>(
+pub fn read_analysis_incremental<L: AnalysisLoader>(
     loader: &L,
     timestamps: HashMap<PathBuf, SystemTime>,
     crate_blacklist: Blacklist,
