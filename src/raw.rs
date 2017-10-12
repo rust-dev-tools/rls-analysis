@@ -60,23 +60,17 @@ pub fn read_analysis_incremental<L: AnalysisLoader>(
         };
 
         for l in listing.files {
-            info!{"Considering {:?}", l}
+            info!("Considering {:?}", l);
             if let ListingKind::File(ref time) = l.kind {
-                let mut path = p.to_path_buf();
-                path.push(&l.name);
-
                 if ignore_data(&l.name, crate_blacklist) {
                     continue;
                 }
 
-                match timestamps.get(&path) {
-                    // We have fresher data than what we can read.
-                    Some(t) => if time <= t {},
-                    // We have old data or it's a crate we've never seen before.
-                    _ => {
-                        read_crate_data(&path)
-                            .map(|a| result.push(Crate::new(a, *time, Some(path))));
-                    }
+                let path = p.join(&l.name);
+                let is_fresh = timestamps.get(&path).map_or(false, |t| time > t);
+                if is_fresh {
+                    read_crate_data(&path)
+                        .map(|a| result.push(Crate::new(a, *time, Some(path))));
                 }
             }
         }
