@@ -95,12 +95,8 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(
 }
 
 fn ignore_data(file_name: &str, crate_blacklist: Blacklist) -> bool {
-    for bl in crate_blacklist {
-        if file_name.starts_with(&format!("lib{}-", bl)) {
-            return true;
-        }
-    }
-    false
+    crate_blacklist.iter()
+        .any(|name| file_name.starts_with(&format!("lib{}-", name)))
 }
 
 fn read_file_contents(path: &Path) -> Result<String, ::std::io::Error> {
