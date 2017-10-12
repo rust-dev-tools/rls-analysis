@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use std::io;
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -29,12 +30,10 @@ pub enum ListingKind {
 }
 
 impl DirectoryListing {
-    pub fn from_path(path: &Path) -> Result<DirectoryListing, String> {
+    pub fn from_path(path: &Path) -> io::Result<DirectoryListing> {
         let mut files = vec![];
-        let dir = match path.read_dir() {
-            Ok(d) => d,
-            Err(s) => return Err(s.to_string()),
-        };
+        let dir = path.read_dir()?;
+
         for entry in dir {
             if let Ok(entry) = entry {
                 let name = entry.file_name().to_str().unwrap().to_owned();
@@ -46,7 +45,7 @@ impl DirectoryListing {
                         });
                     } else if file_type.is_file() {
                         files.push(Listing {
-                            kind: ListingKind::File(entry.metadata().unwrap().modified().unwrap()),
+                            kind: ListingKind::File(entry.metadata()?.modified()?),
                             name: name,
                         });
                     }

@@ -114,7 +114,10 @@ fn read_crate_data(path: &Path) -> Option<Analysis> {
         info!("couldn't read file: {}", err);
         Err(err)
     }).ok()?;
-    let s = ::rustc_serialize::json::decode(&buf);
+    let s = ::rustc_serialize::json::decode(&buf).or_else(|err| {
+        info!("deserialisation error: {:?}", err);
+        Err(err)
+    }).ok()?;
 
     let d = t.elapsed();
     info!(
@@ -124,10 +127,7 @@ fn read_crate_data(path: &Path) -> Option<Analysis> {
         d.subsec_nanos()
     );
 
-    if let Err(ref e) = s {
-        info!("deserialisation error: {:?}", e);
-    }
-    s.ok()
+    s
 }
 
 pub fn name_space_for_def_kind(dk: DefKind) -> char {
