@@ -109,18 +109,7 @@ fn sys_root_path() -> PathBuf {
     option_env!("SYSROOT")
         .map(PathBuf::from)
         .or_else(|| {
-            option_env!("RUSTC").and_then(|rustc| {
-                Command::new(rustc)
-                    .arg("--print")
-                    .arg("sysroot")
-                    .output()
-                    .ok()
-                    .and_then(|out| String::from_utf8(out.stdout).ok())
-                    .map(|s| PathBuf::from(s.trim()))
-            })
-        })
-        .or_else(|| {
-            Command::new("rustc")
+            Command::new(option_env!("RUSTC").unwrap_or("rustc"))
                 .arg("--print")
                 .arg("sysroot")
                 .output()

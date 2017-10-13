@@ -135,11 +135,9 @@ impl CrateReader {
 
         let mut per_crate = PerCrateAnalysis::new(krate.timestamp);
 
-        reader.read_defs(
-            krate.analysis.defs,
-            &mut per_crate,
-            krate.analysis.config.distro_crate,
-        );
+        let is_distro_crate = krate.analysis.config.distro_crate;
+
+        reader.read_defs(krate.analysis.defs, &mut per_crate, is_distro_crate);
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
         reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);

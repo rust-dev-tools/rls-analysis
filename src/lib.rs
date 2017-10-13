@@ -27,7 +27,7 @@ mod test;
 
 pub use analysis::Def;
 use analysis::Analysis;
-pub use raw::{name_space_for_def_kind, read_analyis_incremental, DefKind, Target};
+pub use raw::{name_space_for_def_kind, read_analysis_incremental, DefKind, Target};
 pub use loader::{AnalysisLoader, CargoAnalysisLoader};
 
 use std::collections::HashMap;
@@ -165,7 +165,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             a.as_ref().unwrap().timestamps()
         };
 
-        let raw_analysis = read_analyis_incremental(&self.loader, timestamps, blacklist);
+        let raw_analysis = read_analysis_incremental(&self.loader, timestamps, blacklist);
 
         let result = lowering::lower(raw_analysis, base_dir, self, |host, per_crate, path| {
             let mut a = host.analysis.lock()?;
@@ -188,7 +188,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     ) -> AResult<()> {
         trace!("hard_reload {:?} {:?}", path_prefix, base_dir);
         self.loader.set_path_prefix(path_prefix);
-        let raw_analysis = read_analyis_incremental(&self.loader, HashMap::new(), blacklist);
+        let raw_analysis = read_analysis_incremental(&self.loader, HashMap::new(), blacklist);
 
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.

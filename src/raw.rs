@@ -42,7 +42,7 @@ pub struct Crate {
     pub path: Option<PathBuf>,
 }
 
-pub fn read_analyis_incremental<L: AnalysisLoader>(
+pub fn read_analysis_incremental<L: AnalysisLoader>(
     loader: &L,
     timestamps: HashMap<PathBuf, SystemTime>,
     crate_blacklist: Blacklist,
@@ -60,23 +60,17 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(
         };
 
         for l in listing.files {
-            info!{"Considering {:?}", l}
+            info!("Considering {:?}", l);
             if let ListingKind::File(ref time) = l.kind {
-                let mut path = p.to_path_buf();
-                path.push(&l.name);
-
                 if ignore_data(&l.name, crate_blacklist) {
                     continue;
                 }
 
-                match timestamps.get(&path) {
-                    // We have fresher data than what we can read.
-                    Some(t) => if time <= t {},
-                    // We have old data or it's a crate we've never seen before.
-                    _ => {
-                        read_crate_data(&path)
-                            .map(|a| result.push(Crate::new(a, *time, Some(path))));
-                    }
+                let path = p.join(&l.name);
+                let is_fresh = timestamps.get(&path).map_or(false, |t| time > t);
+                if is_fresh {
+                    read_crate_data(&path)
+                        .map(|a| result.push(Crate::new(a, *time, Some(path))));
                 }
             }
         }
@@ -95,12 +89,8 @@ pub fn read_analyis_incremental<L: AnalysisLoader>(
 }
 
 fn ignore_data(file_name: &str, crate_blacklist: Blacklist) -> bool {
-    for bl in crate_blacklist {
-        if file_name.starts_with(&format!("lib{}-", bl)) {
-            return true;
-        }
-    }
-    false
+    crate_blacklist.iter()
+        .any(|name| file_name.starts_with(&format!("lib{}-", name)))
 }
 
 fn read_file_contents(path: &Path) -> Result<String, ::std::io::Error> {
@@ -118,7 +108,10 @@ fn read_crate_data(path: &Path) -> Option<Analysis> {
         info!("couldn't read file: {}", err);
         Err(err)
     }).ok()?;
-    let s = ::rustc_serialize::json::decode(&buf);
+    let s = ::rustc_serialize::json::decode(&buf).or_else(|err| {
+        info!("deserialisation error: {:?}", err);
+        Err(err)
+    }).ok()?;
 
     let d = t.elapsed();
     info!(
@@ -128,10 +121,7 @@ fn read_crate_data(path: &Path) -> Option<Analysis> {
         d.subsec_nanos()
     );
 
-    if let Err(ref e) = s {
-        info!("deserialisation error: {:?}", e);
-    }
-    s.ok()
+    s
 }
 
 pub fn name_space_for_def_kind(dk: DefKind) -> char {
