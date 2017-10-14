@@ -187,7 +187,7 @@ impl Analysis {
                             if def.is_none() {
                                 info!("def not found for {}", id);
                             }
-                            def.map(|def| f(*id, &def))
+                            def.map(|def| f(*id, def))
                         })
                         .collect(),
                 );
@@ -215,7 +215,7 @@ impl Analysis {
         self.for_all_crates(|c| {
             c.def_names.get(name).map(|ids| {
                 ids.into_iter()
-                    .flat_map(|id| c.defs.get(id).map(|def| def.clone()))
+                    .flat_map(|id| c.defs.get(id).cloned())
                     .collect()
             })
         })

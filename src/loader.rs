@@ -98,7 +98,7 @@ fn extract_target_triple(sys_root_path: &Path) -> String {
         .expect("extracting toolchain failed");
     // Extracts x86_64-pc-windows-msvc from nightly-x86_64-pc-windows-pc
     let triple = toolchain
-        .splitn(2, "-")
+        .splitn(2, '-')
         .last()
         .map(String::from)
         .expect("extracting triple failed");
