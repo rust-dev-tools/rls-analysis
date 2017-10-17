@@ -67,7 +67,7 @@ pub fn read_analysis_incremental<L: AnalysisLoader>(
                 }
 
                 let path = p.join(&l.name);
-                let is_fresh = timestamps.get(&path).map_or(false, |t| time > t);
+                let is_fresh = timestamps.get(&path).map_or(true, |t| time > t);
                 if is_fresh {
                     read_crate_data(&path)
                         .map(|a| result.push(Crate::new(a, *time, Some(path))));
