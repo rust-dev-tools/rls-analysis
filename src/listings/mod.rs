@@ -59,7 +59,7 @@ impl DirectoryListing {
             path: path.components()
                 .map(|c| c.as_os_str().to_str().unwrap().to_owned())
                 .collect(),
-            files: files,
+            files,
         })
     }
 }

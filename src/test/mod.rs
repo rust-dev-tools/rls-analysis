@@ -25,19 +25,13 @@ impl AnalysisLoader for TestAnalysisLoader {
         AnalysisHost::new_with_loader(self.clone())
     }
 
-    fn set_path_prefix(&self, _path_prefix: &Path) {}
+    fn set_path_prefix(&mut self, _path_prefix: &Path) {}
 
     fn abs_path_prefix(&self) -> Option<PathBuf> {
         panic!();
     }
 
-    fn iter_paths<F, T>(&self, f: F) -> Vec<T>
-    where
-        F: Fn(&Path) -> Vec<T>,
-    {
-        let paths = &[&self.path];
-        paths.iter().flat_map(|p| f(p).into_iter()).collect()
-    }
+    fn search_directories(&self) -> Vec<PathBuf> { vec![self.path.clone()] }
 }
 
 #[test]
@@ -64,7 +58,7 @@ fn doc_urls_resolve_correctly() {
                 qualname.is_none() || def.qualname == qualname.unwrap()
             })
             .collect();
-        println!("{:#?}", defs);
+        println!("{}: {:#?}", type_, defs);
         assert_eq!(defs.len(), 1);
         assert_eq!(host.doc_url(&defs[0].span), Ok(url.into()));
     }

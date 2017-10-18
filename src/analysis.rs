@@ -11,14 +11,15 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use {Id, Span};
-use raw::DefKind;
+use raw::{CrateId, DefKind};
 
+/// This is the main database that contains all the collected symbol information,
+/// such as definitions, their mapping between spans, hierarchy and so on,
+/// organized in a per-crate fashion.
 #[derive(Debug)]
 pub struct Analysis {
-    // The primary crate will have its data passed directly, not via a file, so
-    // there is no path for it. Because of this key into the hashmap, this means
-    // we can only pass the data for one crate directly.
-    pub per_crate: HashMap<Option<PathBuf>, PerCrateAnalysis>,
+    /// Contains lowered data with global inter-crate `Id`s per each crate.
+    pub per_crate: HashMap<CrateId, PerCrateAnalysis>,
 
     pub doc_url_base: String,
     pub src_url_base: String,
@@ -36,7 +37,6 @@ pub struct PerCrateAnalysis {
     pub globs: HashMap<Span, Glob>,
     pub impls: HashMap<Id, Vec<Span>>,
 
-    pub name: String,
     pub root_id: Option<Id>,
     pub timestamp: SystemTime,
 }
@@ -88,7 +88,6 @@ impl PerCrateAnalysis {
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
             impls: HashMap::new(),
-            name: String::new(),
             root_id: None,
             timestamp,
         }
@@ -105,20 +104,19 @@ impl Analysis {
         }
     }
 
-    pub fn timestamps(&self) -> HashMap<PathBuf, SystemTime> {
+    pub fn timestamps(&self) -> HashMap<CrateId, SystemTime> {
         self.per_crate
             .iter()
-            .filter_map(|(s, pc)| s.as_ref().map(|s| (s.clone(), pc.timestamp)))
+            .map(|(id, c)| (id.clone(), c.timestamp.clone()))
             .collect()
     }
 
-    pub fn update(&mut self, per_crate: PerCrateAnalysis, path: Option<PathBuf>) {
-        self.per_crate.insert(path, per_crate);
+    pub fn update(&mut self, crate_id: CrateId, per_crate: PerCrateAnalysis) {
+        self.per_crate.insert(crate_id, per_crate);
     }
 
     pub fn has_def(&self, id: Id) -> bool {
-        self.for_each_crate(|c| c.defs.get(&id).map(|_| ()))
-            .is_some()
+        self.per_crate.values().any(|c| c.defs.contains_key(&id))
     }
 
     pub fn for_each_crate<F, T>(&self, f: F) -> Option<T>
