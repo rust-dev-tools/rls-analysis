@@ -85,6 +85,8 @@ fn lower_span(raw_span: &raw::SpanData, base_dir: &Path) -> Span {
 }
 
 struct CrateReader {
+    /// This is effectively a map from local crate id -> global crate id, where
+    /// local crate id are indices 0...external_crate_count.
     crate_map: Vec<u32>,
     base_dir: PathBuf,
     crate_name: String,
@@ -96,23 +98,27 @@ impl CrateReader {
         master_crate_map: &mut HashMap<String, u32>,
         base_dir: &Path,
     ) -> CrateReader {
-        // println!("building crate map for {}", crate_name);
-        let next = master_crate_map.len() as u32;
-        let mut crate_map = vec![
-            *master_crate_map
-                .entry(prelude.crate_name.clone())
-                .or_insert_with(|| next),
-        ];
-        // println!("  {} -> {}", crate_name, master_crate_map[&crate_name]);
+        fn fetch_crate_id(map: &mut HashMap<String, u32>, crate_name: &String) -> u32 {
+            let next = map.len() as u32;
+            *map.entry(crate_name.clone()).or_insert(next)
+        }
+        // When reading a local crate and its external crates, we need to:
+        // 1. Update a global crate id map if we encounter any new crate
+        // 2. Prepare a local crate id -> global crate id map, so we can easily
+        // map those when lowering symbols with local crate ids into global registry
+        // It's worth noting, that we assume that local crate id is 0, whereas
+        // the external crates will have num in 1..count contiguous range.
+        trace!("building crate map for {}", prelude.crate_name);
+        let id = fetch_crate_id(master_crate_map, &prelude.crate_name);
+        let mut crate_map = vec![id];
+        trace!("  {} -> {}", prelude.crate_name, master_crate_map[&prelude.crate_name]);
 
         prelude.external_crates.sort_by(|a, b| a.num.cmp(&b.num));
         for c in prelude.external_crates {
             assert!(c.num == crate_map.len() as u32);
-            let next = master_crate_map.len() as u32;
-            crate_map.push(*master_crate_map
-                .entry(c.name.clone())
-                .or_insert_with(|| next));
-            // println!("  {} -> {}", c.name, master_crate_map[&c.name]);
+            let id = fetch_crate_id(master_crate_map, &c.name);
+            crate_map.push(id);
+            trace!("  {} -> {}", c.name, master_crate_map[&c.name]);
         }
 
         CrateReader {
@@ -221,7 +227,7 @@ impl CrateReader {
                     docs: d.docs,
                     // sig: d.sig.map(|ref s| self.lower_sig(s, &self.base_dir)),
                 };
-                info!(
+                trace!(
                     "record def: {:?}/{:?} ({}): {:?}",
                     id,
                     d.id,
@@ -334,15 +340,15 @@ impl CrateReader {
     //     }
     // }
 
+    /// Recreates resulting crate-local (u32, u32) id from compiler to a global
+    /// `u64` `Id`, mapping from a local to global crate id.
     fn id_from_compiler_id(&self, id: &data::Id) -> Id {
         if id.krate == u32::MAX || id.index == u32::MAX {
             return NULL;
         }
-        // We build an id by looking up the local crate number into a global crate number and using
-        // that for the high order bits, then use the index for the least significant bits.
 
         let krate = self.crate_map[id.krate as usize] as u64;
-
+        // Use global crate number for high order bits, then index for least significant bits.
         Id((krate << 32) | (id.index as u64))
     }
 }

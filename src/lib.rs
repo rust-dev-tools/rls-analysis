@@ -62,7 +62,7 @@ pub struct SymbolResult {
 impl SymbolResult {
     fn new(id: Id, def: &Def) -> SymbolResult {
         SymbolResult {
-            id: id,
+            id,
             name: def.name.clone(),
             span: def.span.clone(),
             kind: def.kind,
@@ -97,18 +97,18 @@ impl AnalysisHost<CargoAnalysisLoader> {
             master_crate_map: Mutex::new(HashMap::new()),
             loader: CargoAnalysisLoader {
                 path_prefix: Mutex::new(None),
-                target: target,
+                target,
             },
         }
     }
 }
 
 impl<L: AnalysisLoader> AnalysisHost<L> {
-    pub fn new_with_loader(l: L) -> AnalysisHost<L> {
-        AnalysisHost {
+    pub fn new_with_loader(loader: L) -> Self {
+        Self {
             analysis: Mutex::new(None),
             master_crate_map: Mutex::new(HashMap::new()),
-            loader: l,
+            loader,
         }
     }
 
@@ -167,12 +167,11 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
         let raw_analysis = read_analysis_incremental(&self.loader, timestamps, blacklist);
 
-        let result = lowering::lower(raw_analysis, base_dir, self, |host, per_crate, path| {
+        lowering::lower(raw_analysis, base_dir, self, |host, per_crate, path| {
             let mut a = host.analysis.lock()?;
             a.as_mut().unwrap().update(per_crate, path);
             Ok(())
-        });
-        result
+        })
     }
 
     // Reloads the entire project's analysis data.
@@ -226,8 +225,8 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         Ok(())
     }
 
-    /// Note that self.has_def == true =/> self.goto_def.is_some(), since if the
-    /// def is in an api crate, there is no reasonable span to jump to.
+    /// Note that `self.has_def()` =/> `self.goto_def().is_ok()`, since if the
+    /// Def is in an api crate, there is no reasonable Span to jump to.
     pub fn has_def(&self, id: Id) -> bool {
         match self.analysis.lock() {
             Ok(a) => a.as_ref().unwrap().has_def(id),
@@ -416,7 +415,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     pub fn find_impls(&self, id: Id) -> AResult<Vec<Span>> {
         self.with_analysis(|a| {
-            Some(a.for_all_crates(|c| c.impls.get(&id).map(|v| v.clone())))
+            Some(a.for_all_crates(|c| c.impls.get(&id).cloned()))
         })
     }
 
@@ -490,7 +489,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                 analysis.with_defs(p, |parent| match def.kind {
                     DefKind::Field | DefKind::Method | DefKind::Tuple => {
                         let ns = name_space_for_def_kind(def.kind);
-                        let mut res = AnalysisHost::<L>::mk_doc_url(&parent, analysis)
+                        let mut res = AnalysisHost::<L>::mk_doc_url(parent, analysis)
                             .unwrap_or_else(|| "".into());
                         res.push_str(&format!("#{}.{}", def.name, ns));
                         res
