@@ -293,7 +293,6 @@ fn test_types() {
     assert_type(&host, "TestTrait", DefKind::Trait, &[25]);
     assert_type(&host, "test_method", DefKind::Method, &[26]);
     assert_type(&host, "FooEnum", DefKind::Enum, &[29]);
-    // TODO: TupleVariant and StructVariant DefKind when rustc uses rls-data 0.11
-    assert_type(&host, "TupleVariant", DefKind::Tuple, &[30]);
-    assert_type(&host, "StructVariant", DefKind::Struct, &[31]);
+    assert_type(&host, "TupleVariant", DefKind::TupleVariant, &[30]);
+    assert_type(&host, "StructVariant", DefKind::StructVariant, &[31]);
 }

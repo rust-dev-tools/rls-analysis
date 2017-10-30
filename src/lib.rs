@@ -487,7 +487,8 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         match def.parent {
             Some(p) => {
                 analysis.with_defs(p, |parent| match def.kind {
-                    DefKind::Field | DefKind::Method | DefKind::Tuple => {
+                    DefKind::Field | DefKind::Method | DefKind::Tuple |
+                    DefKind::TupleVariant | DefKind::StructVariant => {
                         let ns = name_space_for_def_kind(def.kind);
                         let mut res = AnalysisHost::<L>::mk_doc_url(parent, analysis)
                             .unwrap_or_else(|| "".into());
