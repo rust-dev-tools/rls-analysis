@@ -127,8 +127,6 @@ fn read_crate_data(path: &Path) -> Option<Analysis> {
 pub fn name_space_for_def_kind(dk: DefKind) -> char {
     match dk {
         DefKind::Enum |
-        DefKind::TupleVariant |
-        DefKind::StructVariant |
         DefKind::Struct |
         DefKind::Union |
         DefKind::Type |
@@ -141,6 +139,8 @@ pub fn name_space_for_def_kind(dk: DefKind) -> char {
         DefKind::Static |
         DefKind::Const |
         DefKind::Tuple |
+        DefKind::TupleVariant |
+        DefKind::StructVariant |
         DefKind::Field => 'v',
         DefKind::Macro => 'm',
     }
