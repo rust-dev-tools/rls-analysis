@@ -108,23 +108,24 @@ impl CrateReader {
         // map those when lowering symbols with local crate ids into global registry
         // It's worth noting, that we assume that local crate id is 0, whereas
         // the external crates will have num in 1..count contiguous range.
-        trace!("building crate map for {}", prelude.crate_name);
-        let id = fetch_crate_id(master_crate_map, &prelude.crate_name);
+        let crate_name = prelude.crate_id.name.clone();
+        trace!("building crate map for {}", crate_name);
+        let id = fetch_crate_id(master_crate_map, &crate_name);
         let mut crate_map = vec![id];
-        trace!("  {} -> {}", prelude.crate_name, master_crate_map[&prelude.crate_name]);
+        trace!("  {} -> {}", crate_name, master_crate_map[&crate_name]);
 
         prelude.external_crates.sort_by(|a, b| a.num.cmp(&b.num));
         for c in prelude.external_crates {
             assert!(c.num == crate_map.len() as u32);
-            let id = fetch_crate_id(master_crate_map, &c.name);
+            let id = fetch_crate_id(master_crate_map, &c.id.name);
             crate_map.push(id);
-            trace!("  {} -> {}", c.name, master_crate_map[&c.name]);
+            trace!("  {} -> {}", c.id.name, master_crate_map[&c.id.name]);
         }
 
         CrateReader {
             crate_map,
             base_dir: base_dir.to_owned(),
-            crate_name: prelude.crate_name,
+            crate_name: crate_name,
         }
     }
 
