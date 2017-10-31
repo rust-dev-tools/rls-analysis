@@ -16,3 +16,4 @@ derive-new = "0.5"
 
 [dev-dependencies]
 lazy_static = "0.2"
+env_logger = "0.3"

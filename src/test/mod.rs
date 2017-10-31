@@ -11,6 +11,9 @@ use raw::DefKind;
 
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+extern crate env_logger;
+
 #[derive(Clone, new)]
 struct TestAnalysisLoader {
     path: PathBuf,
@@ -303,4 +306,20 @@ fn test_child_count() {
     let ids = host.search_for_id("Foo").unwrap();
     let id = ids[0];
     assert_eq!(host.for_each_child_def(id, |id, _| id).unwrap().len(), 1);
+}
+
+#[test]
+fn test_self() {
+    env_logger::init().unwrap();
+
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/exprs/save-analysis").to_owned(),
+    ));
+    host.reload(Path::new("test_data/exprs"), Path::new("test_data/exprs"))
+        .unwrap();
+
+    let spans = host.search("self").unwrap();
+    assert_eq!(spans.len(), 2);
+    let def = host.goto_def(&spans[1]);
+    assert_eq!(def.unwrap(), spans[0]);
 }

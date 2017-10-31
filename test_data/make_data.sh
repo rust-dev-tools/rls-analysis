@@ -29,3 +29,9 @@ cd types
 RUSTFLAGS=-Zsave-analysis cargo build
 cp target/debug/deps/save-analysis/types-*.json save-analysis
 cd ..
+
+# Expressions
+cd exprs
+RUSTFLAGS=-Zsave-analysis cargo build
+cp target/debug/deps/save-analysis/exprs-*.json save-analysis
+cd ..
