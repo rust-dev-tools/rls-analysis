@@ -17,7 +17,7 @@ use util;
 
 use span;
 
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use std::iter::Extend;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -205,14 +205,14 @@ impl CrateReader {
                     .push(id);
                 let parent = d.parent.map(|id| self.id_from_compiler_id(&id));
                 if let Some(parent) = parent {
-                    analysis
+                    let children = analysis
                         .children
                         .entry(parent)
-                        .or_insert_with(|| vec![])
-                        .push(id);
+                        .or_insert_with(HashSet::new);
+                    children.insert(id);
                 }
                 if !d.children.is_empty() {
-                    let children_for_id = analysis.children.entry(id).or_insert_with(Vec::new);
+                    let children_for_id = analysis.children.entry(id).or_insert_with(HashSet::new);
                     children_for_id
                         .extend(d.children.iter().map(|id| self.id_from_compiler_id(id)));
                 }

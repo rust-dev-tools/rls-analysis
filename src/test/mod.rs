@@ -290,9 +290,23 @@ fn test_types() {
     assert_type(&host, "TEST_STATIC", DefKind::Static, &[13]);
     assert_type(&host, "test_module", DefKind::Mod, &[17]);
     assert_type(&host, "TestType", DefKind::Type, &[18]);
+    //assert_type(&host, "TestUnion", DefKind::Union, &[21]);
     assert_type(&host, "TestTrait", DefKind::Trait, &[25]);
     assert_type(&host, "test_method", DefKind::Method, &[26]);
     assert_type(&host, "FooEnum", DefKind::Enum, &[29]);
     assert_type(&host, "TupleVariant", DefKind::TupleVariant, &[30]);
     assert_type(&host, "StructVariant", DefKind::StructVariant, &[31]);
+}
+
+#[test]
+fn test_child_count() {
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/types/save-analysis").to_owned(),
+    ));
+    host.reload(Path::new("test_data/types"), Path::new("test_data/types"))
+        .unwrap();
+
+    let ids = host.search_for_id("Foo").unwrap();
+    let id = ids[0];
+    assert_eq!(host.for_each_child_def(id, |id, _| id).unwrap().len(), 1);
 }

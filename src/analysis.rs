@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -30,7 +30,7 @@ pub struct PerCrateAnalysis {
     pub def_id_for_span: HashMap<Span, Id>,
     pub defs: HashMap<Id, Def>,
     pub defs_per_file: HashMap<PathBuf, Vec<Id>>,
-    pub children: HashMap<Id, Vec<Id>>,
+    pub children: HashMap<Id, HashSet<Id>>,
     pub def_names: HashMap<String, Vec<Id>>,
     pub ref_spans: HashMap<Id, Vec<Span>>,
     pub globs: HashMap<Span, Glob>,
