@@ -27,8 +27,8 @@ mod test;
 
 pub use analysis::Def;
 use analysis::Analysis;
-pub use raw::{name_space_for_def_kind, read_analysis_incremental, DefKind, Target};
-pub use loader::{AnalysisLoader, CargoAnalysisLoader};
+pub use raw::{name_space_for_def_kind, read_analysis_from_files, CrateId, DefKind};
+pub use loader::{AnalysisLoader, CargoAnalysisLoader, Target};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -39,8 +39,8 @@ use std::u64;
 #[derive(Debug)]
 pub struct AnalysisHost<L: AnalysisLoader = CargoAnalysisLoader> {
     analysis: Mutex<Option<Analysis>>,
-    master_crate_map: Mutex<HashMap<String, u32>>,
-    loader: L,
+    master_crate_map: Mutex<HashMap<CrateId, u32>>,
+    loader: Mutex<L>,
 }
 
 pub type AResult<T> = Result<T, AError>;
@@ -72,10 +72,13 @@ impl SymbolResult {
 
 pub type Span = span::Span<span::ZeroIndexed>;
 
+/// A common identifier for definitions, references etc. This is effectively a
+/// `DefId` with globally unique crate number (instead of a compiler generated
+/// crate-local number).
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, new)]
 pub struct Id(u64);
 
-// Used to indicate a missing index in the Id.
+/// Used to indicate a missing index in the Id.
 pub const NULL: Id = Id(u64::MAX);
 
 type Blacklist<'a> = &'a [&'static str];
@@ -95,10 +98,7 @@ impl AnalysisHost<CargoAnalysisLoader> {
         AnalysisHost {
             analysis: Mutex::new(None),
             master_crate_map: Mutex::new(HashMap::new()),
-            loader: CargoAnalysisLoader {
-                path_prefix: Mutex::new(None),
-                target,
-            },
+            loader: Mutex::new(CargoAnalysisLoader::new(target)),
         }
     }
 }
@@ -108,7 +108,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         Self {
             analysis: Mutex::new(None),
             master_crate_map: Mutex::new(HashMap::new()),
-            loader,
+            loader: Mutex::new(loader),
         }
     }
 
@@ -117,20 +117,24 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     /// passing in directly.
     pub fn reload_from_analysis(
         &self,
-        analysis: data::Analysis,
+        analysis: Vec<data::Analysis>,
         path_prefix: &Path,
         base_dir: &Path,
         blacklist: Blacklist,
     ) -> AResult<()> {
         self.reload_with_blacklist(path_prefix, base_dir, blacklist)?;
 
+        let crates: Vec<_> = analysis.into_iter()
+            .map(|analysis| raw::Crate::new(analysis, SystemTime::now()))
+            .collect();
+
         lowering::lower(
-            vec![raw::Crate::new(analysis, SystemTime::now(), None)],
+            crates,
             base_dir,
             self,
-            |host, per_crate, path| {
+            |host, per_crate, id| {
                 let mut a = host.analysis.lock()?;
-                a.as_mut().unwrap().update(per_crate, path);
+                a.as_mut().unwrap().update(id, per_crate);
                 Ok(())
             },
         )
@@ -152,29 +156,25 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
             base_dir,
             blacklist
         );
-        let empty = {
-            let a = self.analysis.lock()?;
-            a.is_none()
-        };
-        if empty || self.loader.needs_hard_reload(path_prefix) {
+        let empty = self.analysis.lock()?.is_none();
+        if empty || self.loader.lock()?.needs_hard_reload(path_prefix) {
             return self.hard_reload_with_blacklist(path_prefix, base_dir, blacklist);
         }
 
-        let timestamps = {
-            let a = self.analysis.lock()?;
-            a.as_ref().unwrap().timestamps()
+        let timestamps = self.analysis.lock()?.as_ref().unwrap().timestamps();
+        let raw_analysis = {
+            let loader = self.loader.lock()?;
+            read_analysis_from_files(&*loader, timestamps, blacklist)
         };
 
-        let raw_analysis = read_analysis_incremental(&self.loader, timestamps, blacklist);
-
-        lowering::lower(raw_analysis, base_dir, self, |host, per_crate, path| {
+        lowering::lower(raw_analysis, base_dir, self, |host, per_crate, id| {
             let mut a = host.analysis.lock()?;
-            a.as_mut().unwrap().update(per_crate, path);
+            a.as_mut().unwrap().update(id, per_crate);
             Ok(())
         })
     }
 
-    // Reloads the entire project's analysis data.
+    /// Reloads the entire project's analysis data.
     pub fn hard_reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
         self.hard_reload_with_blacklist(path_prefix, base_dir, &[])
     }
@@ -186,42 +186,42 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         blacklist: Blacklist,
     ) -> AResult<()> {
         trace!("hard_reload {:?} {:?}", path_prefix, base_dir);
-        self.loader.set_path_prefix(path_prefix);
-        let raw_analysis = read_analysis_incremental(&self.loader, HashMap::new(), blacklist);
-
         // We're going to create a dummy AnalysisHost that we will fill with data,
         // then once we're done, we'll swap its data into self.
-        let mut fresh_host = self.loader.fresh_host();
+        let mut fresh_host = self.loader.lock()?.fresh_host();
         fresh_host.analysis = Mutex::new(Some(Analysis::new()));
-        let lowering_result = lowering::lower(
-            raw_analysis,
-            base_dir,
-            &fresh_host,
-            |host, per_crate, path| {
-                host.analysis
-                    .lock()
-                    .unwrap()
-                    .as_mut()
-                    .unwrap()
-                    .per_crate
-                    .insert(path, per_crate);
-                Ok(())
-            },
-        );
-
-        if let Err(s) = lowering_result {
-            let mut a = self.analysis.lock()?;
-            *a = None;
-            return Err(s);
-        }
 
         {
-            let mut mcm = self.master_crate_map.lock()?;
-            *mcm = fresh_host.master_crate_map.into_inner().unwrap();
+            let mut fresh_loader = fresh_host.loader.lock().unwrap();
+            fresh_loader.set_path_prefix(path_prefix); // TODO: Needed?
+
+            let raw_analysis = read_analysis_from_files(&*fresh_loader,
+                                                        HashMap::new(),
+                                                        blacklist);
+            lowering::lower(raw_analysis, base_dir, &fresh_host, |host, per_crate, id| {
+                let mut a = host.analysis.lock()?;
+                a.as_mut().unwrap().update(id, per_crate);
+                Ok(())
+            })?;
         }
 
-        let mut a = self.analysis.lock()?;
-        *a = Some(fresh_host.analysis.into_inner().unwrap().unwrap());
+        // To guarantee a consistent state and no corruption in case an error
+        // happens during reloading, we need to swap data with a dummy host in
+        // a single atomic step. We can't lock and swap every member at a time,
+        // as this can possibly lead to inconsistent state, but now this can possibly
+        // deadlock, which isn't that good. Ideally we should have guaranteed
+        // exclusive access to AnalysisHost as a whole to perform a reliable swap.
+        macro_rules! swap_mutex_fields {
+            ($($name:ident),*) => {
+                // First, we need exclusive access to every field before swapping
+                $(let mut $name = self.$name.lock()?;)*
+                // Then, we can swap every field
+                $(*$name = fresh_host.$name.into_inner().unwrap();)*
+            };
+        }
+
+        swap_mutex_fields!(analysis, master_crate_map, loader);
+
         Ok(())
     }
 
@@ -275,7 +275,12 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     pub fn def_roots(&self) -> AResult<Vec<(Id, String)>> {
         self.with_analysis(|a| {
             Some(
-                a.for_all_crates(|c| c.root_id.map(|id| vec![(id, c.name.clone())])),
+                a.per_crate
+                .iter()
+                .filter_map(|(crate_id, data)| {
+                    data.root_id.map(|id| (id, crate_id.name.clone()))
+                })
+                .collect()
             )
         })
     }
@@ -448,7 +453,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     // e.g., https://github.com/rust-lang/rust/blob/master/src/liballoc/string.rs#L261-L263
     pub fn src_url(&self, span: &Span) -> AResult<String> {
         // FIXME would be nice not to do this every time.
-        let path_prefix = &self.loader.abs_path_prefix();
+        let path_prefix = self.loader.lock().unwrap().abs_path_prefix();
 
         self.with_analysis(|a| {
             a.def_id_for_span(span).and_then(|id| {

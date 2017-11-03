@@ -6,11 +6,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// For processing the raw save-analysis data from rustc into rustw's in-memory representation.
+//! For processing the raw save-analysis data from rustc into the rls
+//! in-memory representation.
 
 use analysis::{Def, Glob, PerCrateAnalysis};
 use data;
-use raw::{self, RelationKind};
+use raw::{self, RelationKind, CrateId};
 use {AResult, AnalysisHost, Id, Span, NULL};
 use loader::AnalysisLoader;
 use util;
@@ -31,7 +32,7 @@ pub fn lower<F, L>(
     mut f: F,
 ) -> AResult<()>
 where
-    F: FnMut(&AnalysisHost<L>, PerCrateAnalysis, Option<PathBuf>) -> AResult<()>,
+    F: FnMut(&AnalysisHost<L>, PerCrateAnalysis, CrateId) -> AResult<()>,
     L: AnalysisLoader,
 {
     let rss = util::get_resident().unwrap_or(0);
@@ -40,19 +41,19 @@ where
     for c in raw_analysis {
         let t_start = Instant::now();
 
-        let (per_crate, path) = CrateReader::read_crate(analysis, c, base_dir);
+        let (per_crate, id) = CrateReader::read_crate(analysis, c, base_dir);
 
         let time = t_start.elapsed();
         info!(
-            "Lowering {:?} in {:.2}s",
-            path.as_ref().map(|p| p.display().to_string()),
+            "Lowering {} in {:.2}s",
+            format!("{} ({:?})", id.name, id.disambiguator),
             time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0
         );
         info!("    defs:  {}", per_crate.defs.len());
         info!("    refs:  {}", per_crate.ref_spans.len());
         info!("    globs: {}", per_crate.globs.len());
 
-        f(analysis, per_crate, path)?;
+        f(analysis, per_crate, id)?;
     }
 
     let time = t_start.elapsed();
@@ -84,6 +85,9 @@ fn lower_span(raw_span: &raw::SpanData, base_dir: &Path) -> Span {
     )
 }
 
+/// Responsible for processing the raw `data::Analysis`, including translating
+/// from local crate ids to global crate ids, and creating lowered
+/// `PerCrateAnalysis`.
 struct CrateReader {
     /// This is effectively a map from local crate id -> global crate id, where
     /// local crate id are indices 0...external_crate_count.
@@ -95,12 +99,13 @@ struct CrateReader {
 impl CrateReader {
     fn from_prelude(
         mut prelude: raw::CratePreludeData,
-        master_crate_map: &mut HashMap<String, u32>,
+        master_crate_map: &mut HashMap<CrateId, u32>,
         base_dir: &Path,
     ) -> CrateReader {
-        fn fetch_crate_id(map: &mut HashMap<String, u32>, crate_name: &String) -> u32 {
+        fn fetch_crate_index(map: &mut HashMap<CrateId, u32>,
+                             id: data::GlobalCrateId) -> u32 {
             let next = map.len() as u32;
-            *map.entry(crate_name.clone()).or_insert(next)
+            *map.entry(id).or_insert(next)
         }
         // When reading a local crate and its external crates, we need to:
         // 1. Update a global crate id map if we encounter any new crate
@@ -108,32 +113,33 @@ impl CrateReader {
         // map those when lowering symbols with local crate ids into global registry
         // It's worth noting, that we assume that local crate id is 0, whereas
         // the external crates will have num in 1..count contiguous range.
-        let crate_name = prelude.crate_id.name.clone();
-        trace!("building crate map for {}", crate_name);
-        let id = fetch_crate_id(master_crate_map, &crate_name);
-        let mut crate_map = vec![id];
-        trace!("  {} -> {}", crate_name, master_crate_map[&crate_name]);
+        let crate_id = prelude.crate_id;
+        trace!("building crate map for {}", crate_id.name);
+        let index = fetch_crate_index(master_crate_map, crate_id.clone());
+        let mut crate_map = vec![index];
+        trace!("  {} -> {}", crate_id.name, master_crate_map[&crate_id]);
 
         prelude.external_crates.sort_by(|a, b| a.num.cmp(&b.num));
         for c in prelude.external_crates {
             assert!(c.num == crate_map.len() as u32);
-            let id = fetch_crate_id(master_crate_map, &c.id.name);
-            crate_map.push(id);
-            trace!("  {} -> {}", c.id.name, master_crate_map[&c.id.name]);
+            let index = fetch_crate_index(master_crate_map, c.id.clone());
+            crate_map.push(index);
+            trace!("  {} -> {}", c.id.name, master_crate_map[&c.id]);
         }
 
         CrateReader {
             crate_map,
             base_dir: base_dir.to_owned(),
-            crate_name: crate_name,
+            crate_name: crate_id.name,
         }
     }
 
+    /// Lowers a given `raw::Crate` into `AnalysisHost`.
     fn read_crate<L: AnalysisLoader>(
         project_analysis: &AnalysisHost<L>,
         krate: raw::Crate,
         base_dir: &Path,
-    ) -> (PerCrateAnalysis, Option<PathBuf>) {
+    ) -> (PerCrateAnalysis, CrateId) {
         let reader = CrateReader::from_prelude(
             krate.analysis.prelude.unwrap(),
             &mut project_analysis.master_crate_map.lock().unwrap(),
@@ -143,15 +149,12 @@ impl CrateReader {
         let mut per_crate = PerCrateAnalysis::new(krate.timestamp);
 
         let is_distro_crate = krate.analysis.config.distro_crate;
-
         reader.read_defs(krate.analysis.defs, &mut per_crate, is_distro_crate);
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
         reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
 
-        per_crate.name = reader.crate_name;
-
-        (per_crate, krate.path)
+        (per_crate, krate.id)
     }
 
     fn read_imports<L: AnalysisLoader>(
@@ -165,7 +168,7 @@ impl CrateReader {
             if !i.value.is_empty() {
                 // A glob import.
                 let glob = Glob { value: i.value };
-                // println!("record glob {:?} {:?}", span, glob);
+                trace!("record glob {:?} {:?}", span, glob);
                 analysis.globs.insert(span, glob);
             } else if let Some(ref ref_id) = i.ref_id {
                 // Import where we know the referred def.
@@ -173,7 +176,7 @@ impl CrateReader {
                 if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) &&
                     (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id))
                 {
-                    // println!("record import ref {:?} {:?} {:?} {}", i, span, ref_id, def_id);
+                    trace!("record import ref {:?} {:?} {:?} {}", i, span, ref_id, def_id);
                     analysis.def_id_for_span.insert(span.clone(), def_id);
                     analysis
                         .ref_spans
@@ -341,22 +344,23 @@ impl CrateReader {
     //     }
     // }
 
-    /// Recreates resulting crate-local (u32, u32) id from compiler to a global
-    /// `u64` `Id`, mapping from a local to global crate id.
+    /// Recreates resulting crate-local (`u32`, `u32`) id from compiler
+    /// to a global `u64` `Id`, mapping from a local to global crate id.
     fn id_from_compiler_id(&self, id: &data::Id) -> Id {
         if id.krate == u32::MAX || id.index == u32::MAX {
             return NULL;
         }
 
         let krate = self.crate_map[id.krate as usize] as u64;
-        // Use global crate number for high order bits, then index for least significant bits.
+        // Use global crate number for high order bits,
+        // then index for least significant bits.
         Id((krate << 32) | (id.index as u64))
     }
 }
 
 fn abs_ref_id<L: AnalysisLoader>(
     id: Id,
-    analysis: &mut PerCrateAnalysis,
+    analysis: &PerCrateAnalysis,
     project_analysis: &AnalysisHost<L>,
 ) -> Option<Id> {
     if project_analysis.has_def(id) || analysis.defs.contains_key(&id) {

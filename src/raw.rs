@@ -8,56 +8,48 @@
 
 use {AnalysisLoader, Blacklist};
 use listings::{DirectoryListing, ListingKind};
-pub use data::{CratePreludeData, Def, DefKind, Import, Ref, Relation, RelationKind, SigElement,
-               Signature, SpanData};
+pub use data::{CratePreludeData, Def, DefKind, GlobalCrateId as CrateId, Import,
+               Ref, Relation, RelationKind, SigElement, Signature, SpanData};
 use data::Analysis;
 
-
 use std::collections::HashMap;
-use std::fmt;
 use std::fs::File;
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::io::{self, Read};
+use std::path::Path;
 use std::time::{Instant, SystemTime};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Target {
-    Release,
-    Debug,
+#[derive(Debug)]
+pub struct Crate {
+    pub id: CrateId,
+    pub analysis: Analysis,
+    pub timestamp: SystemTime,
 }
 
-impl fmt::Display for Target {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Target::Release => write!(f, "release"),
-            Target::Debug => write!(f, "debug"),
+impl Crate {
+    pub fn new(analysis: Analysis, timestamp: SystemTime) -> Crate {
+        Crate {
+            id: analysis.prelude.as_ref().unwrap().crate_id.clone(),
+            analysis,
+            timestamp
         }
     }
 }
 
-#[derive(Debug, new)]
-pub struct Crate {
-    pub analysis: Analysis,
-    pub timestamp: SystemTime,
-    pub path: Option<PathBuf>,
-}
-
-pub fn read_analysis_incremental<L: AnalysisLoader>(
+/// Reads raw analysis data for non-blacklisted crates from files in directories
+/// pointed by `loader`.
+pub fn read_analysis_from_files<L: AnalysisLoader>(
     loader: &L,
-    timestamps: HashMap<PathBuf, SystemTime>,
+    crate_timestamps: HashMap<CrateId, SystemTime>,
     crate_blacklist: Blacklist,
 ) -> Vec<Crate> {
-    loader.iter_paths(|p| {
+    let mut result = vec![];
+
+    loader.search_directories()
+    .iter()
+    .inspect(|path| trace!("Considering analysis files at {}", path.display()))
+    .filter_map(|p| DirectoryListing::from_path(p).ok().map(|list| (p, list)))
+    .for_each(|(p, listing)| {
         let t = Instant::now();
-
-        let mut result = vec![];
-
-        let listing = match DirectoryListing::from_path(p) {
-            Ok(l) => l,
-            Err(_) => {
-                return result;
-            }
-        };
 
         for l in listing.files {
             info!("Considering {:?}", l);
@@ -67,11 +59,20 @@ pub fn read_analysis_incremental<L: AnalysisLoader>(
                 }
 
                 let path = p.join(&l.name);
-                let is_fresh = timestamps.get(&path).map_or(true, |t| time > t);
-                if is_fresh {
-                    read_crate_data(&path)
-                        .map(|a| result.push(Crate::new(a, *time, Some(path))));
-                }
+                // TODO: Bring back path-based timestamps, so we can discard
+                // stale data before reading the file and attempting the
+                // deserialization, as it can take a considerate amount of time
+                // for big analysis data files.
+                //let is_fresh = timestamps.get(&path).map_or(true, |t| time > t);
+                read_crate_data(&path).map(|analysis| {
+                    let is_fresh = {
+                        let id = &analysis.prelude.as_ref().unwrap().crate_id;
+                        crate_timestamps.get(id).map_or(true, |t| time > t) 
+                    };
+                    if is_fresh {
+                        result.push(Crate::new(analysis, *time));
+                    }
+                });
             }
         }
 
@@ -83,9 +84,9 @@ pub fn read_analysis_incremental<L: AnalysisLoader>(
             d.as_secs(),
             d.subsec_nanos()
         );
+    });
 
-        result
-    })
+    result
 }
 
 fn ignore_data(file_name: &str, crate_blacklist: Blacklist) -> bool {
@@ -93,13 +94,15 @@ fn ignore_data(file_name: &str, crate_blacklist: Blacklist) -> bool {
         .any(|name| file_name.starts_with(&format!("lib{}-", name)))
 }
 
-fn read_file_contents(path: &Path) -> Result<String, ::std::io::Error> {
+fn read_file_contents(path: &Path) -> io::Result<String> {
     let mut file = File::open(&path)?;
     let mut buf = String::new();
     file.read_to_string(&mut buf)?;
     Ok(buf)
 }
 
+/// Attempts to read and deserialize `Analysis` data from a JSON file at `path`,
+/// returns `Some(data)` on success.
 fn read_crate_data(path: &Path) -> Option<Analysis> {
     trace!("read_crate_data {:?}", path);
     let t = Instant::now();
