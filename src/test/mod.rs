@@ -287,7 +287,7 @@ fn test_types() {
     assert_type(&host, "TEST_STATIC", DefKind::Static, &[13]);
     assert_type(&host, "test_module", DefKind::Mod, &[17]);
     assert_type(&host, "TestType", DefKind::Type, &[18]);
-    //assert_type(&host, "TestUnion", DefKind::Union, &[21]);
+    assert_type(&host, "TestUnion", DefKind::Union, &[21]);
     assert_type(&host, "TestTrait", DefKind::Trait, &[25]);
     assert_type(&host, "test_method", DefKind::Method, &[26]);
     assert_type(&host, "FooEnum", DefKind::Enum, &[29]);
