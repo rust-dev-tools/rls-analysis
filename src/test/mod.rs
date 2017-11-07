@@ -310,8 +310,6 @@ fn test_child_count() {
 
 #[test]
 fn test_self() {
-    env_logger::init().unwrap();
-
     let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
         Path::new("test_data/exprs/save-analysis").to_owned(),
     ));
@@ -319,6 +317,20 @@ fn test_self() {
         .unwrap();
 
     let spans = host.search("self").unwrap();
+    assert_eq!(spans.len(), 2);
+    let def = host.goto_def(&spans[1]);
+    assert_eq!(def.unwrap(), spans[0]);
+}
+
+#[test]
+fn test_extern_fn() {
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/exprs/save-analysis").to_owned(),
+    ));
+    host.reload(Path::new("test_data/exprs"), Path::new("test_data/exprs"))
+        .unwrap();
+
+    let spans = host.search("foo").unwrap();
     assert_eq!(spans.len(), 2);
     let def = host.goto_def(&spans[1]);
     assert_eq!(def.unwrap(), spans[0]);

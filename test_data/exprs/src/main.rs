@@ -6,5 +6,8 @@ impl Foo {
     }
 }
 
+pub extern "C" fn foo() {}
+
 fn main() {
+    foo();
 }
