@@ -9,6 +9,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use radix_trie::{Trie, TrieCommon};
 
 use {Id, Span};
 use raw::{CrateId, DefKind};
@@ -34,6 +35,7 @@ pub struct PerCrateAnalysis {
     pub defs_per_file: HashMap<PathBuf, Vec<Id>>,
     pub children: HashMap<Id, HashSet<Id>>,
     pub def_names: HashMap<String, Vec<Id>>,
+    pub def_trie: Trie<String, Vec<Id>>,
     pub ref_spans: HashMap<Id, Vec<Span>>,
     pub globs: HashMap<Span, Glob>,
     pub impls: HashMap<Id, Vec<Span>>,
@@ -117,6 +119,7 @@ impl PerCrateAnalysis {
             defs_per_file: HashMap::new(),
             children: HashMap::new(),
             def_names: HashMap::new(),
+            def_trie: Trie::new(),
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
             impls: HashMap::new(),
@@ -260,12 +263,14 @@ impl Analysis {
         self.for_each_crate(|c| c.defs_per_file.get(file).map(&f))
     }
 
-    pub fn defs_for_name(&self, name: &str) -> Vec<Def> {
+    pub fn matching_defs(&self, stem: &str) -> Vec<Def> {
+        let lowered_stem = stem.to_lowercase();
+
         self.for_all_crates(|c| {
-            c.def_names.get(name).map(|ids| {
-                ids.into_iter()
-                    .flat_map(|id| c.defs.get(id).cloned())
-                    .collect()
+            c.def_trie.get_raw_descendant(&lowered_stem).map(|s| {
+                s.values().flat_map(|ids| 
+                    ids.iter().flat_map(|id| c.defs.get(id)).cloned()
+                ).collect()
             })
         })
     }
