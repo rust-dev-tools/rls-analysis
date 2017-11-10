@@ -11,6 +11,7 @@
 //! default implementation `CargoAnalysisLoader` for Cargo-emitted save-analysis
 //! files.
 
+use std::env;
 use std::ffi::OsStr;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -113,10 +114,11 @@ fn extract_target_triple(sys_root_path: &Path) -> String {
 }
 
 fn sys_root_path() -> PathBuf {
-    option_env!("SYSROOT")
+    env::var("SYSROOT")
+        .ok()
         .map(PathBuf::from)
         .or_else(|| {
-            Command::new(option_env!("RUSTC").unwrap_or("rustc"))
+            Command::new(env::var("RUSTC").unwrap_or(String::from("rustc")))
                 .arg("--print")
                 .arg("sysroot")
                 .output()
@@ -124,10 +126,7 @@ fn sys_root_path() -> PathBuf {
                 .and_then(|out| String::from_utf8(out.stdout).ok())
                 .map(|s| PathBuf::from(s.trim()))
         })
-        .expect(
-            "need to specify SYSROOT or RUSTC env vars, \
-             or rustc must be in PATH",
-        )
+        .expect("need to specify SYSROOT or RUSTC env vars, or rustc must be in PATH")
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
