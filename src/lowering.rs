@@ -9,7 +9,7 @@
 //! For processing the raw save-analysis data from rustc into the rls
 //! in-memory representation.
 
-use analysis::{Def, Glob, PerCrateAnalysis};
+use analysis::{Def, Glob, PerCrateAnalysis, Ref};
 use data;
 use raw::{self, RelationKind, CrateId};
 use {AResult, AnalysisHost, Id, Span, NULL};
@@ -19,6 +19,7 @@ use util;
 use span;
 
 use std::collections::{HashSet, HashMap};
+use std::collections::hash_map::Entry;
 use std::iter::Extend;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -173,18 +174,34 @@ impl CrateReader {
             } else if let Some(ref ref_id) = i.ref_id {
                 // Import where we know the referred def.
                 let def_id = self.id_from_compiler_id(ref_id);
-                if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) &&
-                    (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id))
-                {
-                    trace!("record import ref {:?} {:?} {:?} {}", i, span, ref_id, def_id);
-                    analysis.def_id_for_span.insert(span.clone(), def_id);
-                    analysis
-                        .ref_spans
-                        .entry(def_id)
-                        .or_insert_with(|| vec![])
-                        .push(span);
+                self.record_ref(def_id, span, analysis, project_analysis);
+            }
+        }
+    }
+
+    fn record_ref<L: AnalysisLoader>(
+        &self,
+        def_id: Id,
+        span: Span,
+        analysis: &mut PerCrateAnalysis,
+        project_analysis: &AnalysisHost<L>,
+    ) {
+        if def_id != NULL && (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id)) {
+            trace!("record_ref {:?} {}", span, def_id);
+            match analysis.def_id_for_span.entry(span.clone()) {
+                Entry::Occupied(mut oe) => {
+                    let new = oe.get().add_id(def_id);
+                    oe.insert(new);
+                }
+                Entry::Vacant(ve) => {
+                    ve.insert(Ref::Id(def_id));
                 }
             }
+            analysis
+                .ref_spans
+                .entry(def_id)
+                .or_insert_with(|| vec![])
+                .push(span);
         }
     }
 
@@ -199,7 +216,14 @@ impl CrateReader {
                     .entry(file_name)
                     .or_insert_with(|| vec![])
                     .push(id);
-                analysis.def_id_for_span.insert(span.clone(), id);
+                match analysis.def_id_for_span.entry(span.clone()) {
+                    Entry::Occupied(_) => {
+                        debug!("def already exists at span: {:?} {:?}", span, d);
+                    }
+                    Entry::Vacant(ve) => {
+                        ve.insert(Ref::Id(id));
+                    }
+                }
 
                 analysis
                     .def_names
@@ -269,23 +293,7 @@ impl CrateReader {
         for r in refs {
             let def_id = self.id_from_compiler_id(&r.ref_id);
             let span = lower_span(&r.span, &self.base_dir);
-            if def_id != NULL && !analysis.def_id_for_span.contains_key(&span) {
-                if let Some(def_id) = abs_ref_id(def_id, analysis, project_analysis) {
-                    trace!(
-                        "record ref {:?} {:?} {:?} {}",
-                        r.kind,
-                        span,
-                        r.ref_id,
-                        def_id
-                    );
-                    analysis.def_id_for_span.insert(span.clone(), def_id);
-                    analysis
-                        .ref_spans
-                        .entry(def_id)
-                        .or_insert_with(|| vec![])
-                        .push(span);
-                }
-            }
+            self.record_ref(def_id, span, analysis, project_analysis);
         }
     }
 

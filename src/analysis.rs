@@ -27,8 +27,9 @@ pub struct Analysis {
 
 #[derive(Debug)]
 pub struct PerCrateAnalysis {
-    // Map span to id of def (either because it is the span of the def, or of the def for the ref).
-    pub def_id_for_span: HashMap<Span, Id>,
+    // Map span to id of def (either because it is the span of the def, or of
+    // the def for the ref).
+    pub def_id_for_span: HashMap<Span, Ref>,
     pub defs: HashMap<Id, Def>,
     pub defs_per_file: HashMap<PathBuf, Vec<Id>>,
     pub children: HashMap<Id, HashSet<Id>>,
@@ -39,6 +40,37 @@ pub struct PerCrateAnalysis {
 
     pub root_id: Option<Id>,
     pub timestamp: SystemTime,
+}
+
+#[derive(Debug, Clone)]
+pub enum Ref {
+    // The common case - a reference to a single definition.
+    Id(Id),
+    // Two defs contribute to a single reference, occurs in the field name
+    // shorthand, maybe other places.
+    Double(Id, Id),
+    // Multiple ids, we record only the first def we found, plus a count of defs.
+    // Should only happen due to generated code which has not been well-filtered
+    // by the compiler.
+    Multi(Id, usize),
+}
+
+impl Ref {
+    pub fn some_id(&self) -> Id {
+        match *self {
+            Ref::Id(id) => id,
+            Ref::Double(id, _) => id,
+            Ref::Multi(id, _) => id,
+        }
+    }
+
+    pub fn add_id(&self, def_id: Id) -> Ref {
+        match *self {
+            Ref::Id(id) => Ref::Double(id, def_id),
+            Ref::Double(id, _) => Ref::Multi(id, 3),
+            Ref::Multi(id, n) => Ref::Multi(id, n + 1),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -147,7 +179,26 @@ impl Analysis {
     }
 
     pub fn def_id_for_span(&self, span: &Span) -> Option<Id> {
-        self.for_each_crate(|c| c.def_id_for_span.get(span).cloned())
+        self.ref_for_span(span).map(|r| r.some_id())
+    }
+
+    pub fn ref_for_span(&self, span: &Span) -> Option<Ref> {
+        self.for_each_crate(|c| c.def_id_for_span.get(span).map(|r| r.clone()))
+    }
+
+    // Like def_id_for_span, but will only return a def_id if it is in the same
+    // crate.
+    pub fn local_def_id_for_span(&self, span: &Span) -> Option<Id> {
+        self.for_each_crate(|c| {
+            c.def_id_for_span
+                .get(span)
+                .map(|r| r.some_id())
+                .and_then(|id| if c.defs.contains_key(&id) {
+                    Some(id)
+                } else {
+                    None
+                })
+        })
     }
 
     pub fn with_defs<F, T>(&self, id: Id, f: F) -> Option<T>

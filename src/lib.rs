@@ -25,7 +25,7 @@ mod util;
 #[cfg(test)]
 mod test;
 
-pub use analysis::Def;
+pub use analysis::{Def, Ref};
 use analysis::Analysis;
 pub use raw::{name_space_for_def_kind, read_analysis_from_files, CrateId, DefKind};
 pub use loader::{AnalysisLoader, CargoAnalysisLoader, Target};
@@ -291,41 +291,42 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     /// Like id, but will only return a value if it is in the same crate as span.
     pub fn crate_local_id(&self, span: &Span) -> AResult<Id> {
-        self.with_analysis(|a| {
-            a.for_each_crate(|c| {
-                c.def_id_for_span
-                    .get(span)
-                    .and_then(|id| if c.defs.contains_key(id) {
-                        Some(id)
-                    } else {
-                        None
-                    })
-                    .cloned()
-            })
-        })
+        self.with_analysis(|a| a.local_def_id_for_span(span))
     }
 
-    pub fn find_all_refs(&self, span: &Span, include_decl: bool) -> AResult<Vec<Span>> {
+    // `include_decl` means the declaration will be included as the first result.
+    // `force_unique_spans` means that if any reference is a reference to multiple
+    // defs, then we return an empty vector (in which case, even if include_decl
+    // is true, the result will be empty).
+    // Note that for large numbers of refs, if `force_unique_spans` is true, then
+    // this function might take significantly longer to execute.
+    pub fn find_all_refs(&self, span: &Span, include_decl: bool, force_unique_spans: bool) -> AResult<Vec<Span>> {
         let t_start = Instant::now();
-        let result = if include_decl {
-            self.with_analysis(|a| {
-                a.def_id_for_span(span).and_then(|id| {
-                    a.with_ref_spans(id, |refs| {
-                        def_span!(a, id)
-                            .into_iter()
-                            .chain(refs.iter().cloned())
-                            .collect::<Vec<_>>()
-                    }).or_else(|| def_span!(a, id).map(|s| vec![s]))
-                })
+        let result = self.with_analysis(|a| {
+            a.def_id_for_span(span).map(|id| {
+                let decl = if include_decl {
+                    None
+                } else {
+                    def_span!(a, id)
+                };
+                let refs = a.with_ref_spans(id, |refs| {
+                    if force_unique_spans {
+                        for r in refs.iter() {
+                            match a.ref_for_span(r) {
+                                Some(Ref::Id(_)) => {},
+                                _ => return vec![],
+                            }
+                        }
+                    }
+                    refs.clone()
+                });
+                refs.map(|refs| {
+                    decl.into_iter()
+                        .chain(refs.into_iter())
+                        .collect::<Vec<_>>()
+                }).unwrap_or_else(|| vec![])
             })
-        } else {
-            self.with_analysis(|a| {
-                a.def_id_for_span(span).map(|id| {
-                    a.with_ref_spans(id, |refs| refs.clone())
-                        .unwrap_or_else(Vec::new)
-                })
-            })
-        };
+        });
 
         let time = t_start.elapsed();
         info!(
