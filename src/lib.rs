@@ -305,9 +305,9 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         let result = self.with_analysis(|a| {
             a.def_id_for_span(span).map(|id| {
                 let decl = if include_decl {
-                    None
-                } else {
                     def_span!(a, id)
+                } else {
+                    None
                 };
                 let refs = a.with_ref_spans(id, |refs| {
                     if force_unique_spans {
