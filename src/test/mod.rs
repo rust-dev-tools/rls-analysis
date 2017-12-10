@@ -9,6 +9,7 @@
 use {AnalysisHost, AnalysisLoader};
 use raw::DefKind;
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 #[cfg(test)]
@@ -188,12 +189,6 @@ fn test_hello() {
     assert_eq!(refs[0].range.row_start.0, 0);
     assert_eq!(refs[1].file, Path::new("test_data/hello/src/main.rs"));
     assert_eq!(refs[1].range.row_start.0, 6);
-    let defs = host.name_defs("print_hello").unwrap();
-    assert_eq!(defs.len(), 1);
-    let hello_def = &defs[0];
-    assert_eq!(hello_def.name, "print_hello");
-    assert_eq!(hello_def.kind, DefKind::Function);
-    assert_eq!(hello_def.span.range.row_start.0, 0);
 
     let ids = host.search_for_id("main").unwrap();
     assert_eq!(ids.len(), 1);
@@ -209,12 +204,6 @@ fn test_hello() {
     assert_eq!(refs.len(), 1);
     assert_eq!(refs[0].file, Path::new("test_data/hello/src/main.rs"));
     assert_eq!(refs[0].range.row_start.0, 5);
-    let defs = host.name_defs("main").unwrap();
-    assert_eq!(defs.len(), 1);
-    let main_def = &defs[0];
-    assert_eq!(main_def.name, "main");
-    assert_eq!(main_def.kind, DefKind::Function);
-    assert_eq!(main_def.span.range.row_start.0, 5);
 
     let ids = host.search_for_id("name").unwrap();
     assert_eq!(ids.len(), 1);
@@ -234,12 +223,51 @@ fn test_hello() {
     assert_eq!(refs[0].range.row_start.0, 1);
     assert_eq!(refs[1].file, Path::new("test_data/hello/src/main.rs"));
     assert_eq!(refs[1].range.row_start.0, 2);
-    let defs = host.name_defs("name").unwrap();
+
+    let defs = host.matching_defs("print_hello").unwrap();
     assert_eq!(defs.len(), 1);
-    let name_def = &defs[0];
-    assert_eq!(name_def.name, "name");
-    assert_eq!(name_def.kind, DefKind::Local);
-    assert_eq!(name_def.span.range.row_start.0, 1);
+    let hello_def = &defs[0];
+    assert_eq!(hello_def.name, "print_hello");
+    assert_eq!(hello_def.kind, DefKind::Function);
+    assert_eq!(hello_def.span.range.row_start.0, 0);
+
+    let defs = host.matching_defs("main").unwrap();
+    assert_eq!(defs.len(), 1);
+    let main_def = &defs[0];
+    assert_eq!(main_def.name, "main");
+    assert_eq!(main_def.kind, DefKind::Function);
+    assert_eq!(main_def.span.range.row_start.0, 5);
+
+    let defs = host.matching_defs("name").unwrap();
+    assert_eq!(defs.len(), 1);
+    let matching_def = &defs[0];
+    assert_eq!(matching_def.name, "name");
+    assert_eq!(matching_def.kind, DefKind::Local);
+    assert_eq!(matching_def.span.range.row_start.0, 1);
+
+    assert_eq!(host.matching_defs("goodbye").unwrap().len(), 0);
+    assert_eq!(host.matching_defs("mäin").unwrap().len(), 0);
+
+    let pri_matches = host.matching_defs("pri").unwrap();
+    let print_hello_matches = host.matching_defs("print_hello").unwrap();
+    assert_eq!(1, pri_matches.len());
+    assert_eq!(1, print_hello_matches.len());
+    let pri_f = &pri_matches[0];
+    let print_hello_f = &print_hello_matches[0];
+    assert_eq!(pri_f.name, print_hello_f.name);
+    assert_eq!(pri_f.kind, print_hello_f.kind);
+
+    let all_matches = host.matching_defs("")
+        .unwrap()
+        .iter()
+        .map(|d| d.name.to_owned())
+        .collect::<HashSet<_>>();
+
+    let expected_matches = ["main", "name", "print_hello"]
+        .iter()
+        .map(|&m| String::from(m))
+        .collect::<HashSet<_>>();
+    assert_eq!(all_matches, expected_matches);
 }
 
 // TODO
@@ -265,7 +293,6 @@ fn test_types() {
 
         let refs = host.find_all_refs_by_id(id).unwrap();
         assert_eq!(refs.len(), expect_lines.len());
-        println!("{:?}", refs);
 
         for (i, start) in expect_lines.iter().enumerate() {
             assert_eq!(refs[i].file, Path::new("test_data/types/src/main.rs"));
@@ -293,6 +320,21 @@ fn test_types() {
     assert_type(&host, "FooEnum", DefKind::Enum, &[29]);
     assert_type(&host, "TupleVariant", DefKind::TupleVariant, &[30]);
     assert_type(&host, "StructVariant", DefKind::StructVariant, &[31]);
+
+    let t_matches = host.matching_defs("t").unwrap();
+    let t_names = t_matches.iter().map(|m| m.name.to_owned()).collect::<HashSet<_>>();
+    let expected_t_names = ["TEST_CONST", "TEST_STATIC", "TestTrait", "TestType", "TestUnion",
+        "TupleVariant", "test_binding", "test_method", "test_module"]
+        .iter()
+        .map(|&n| String::from(n))
+        .collect::<HashSet<_>>();
+
+    assert_eq!(t_names, expected_t_names);
+
+    let upper_matches = host.matching_defs("FOOENUM").unwrap();
+    let lower_matches = host.matching_defs("fooenum").unwrap();
+    assert_eq!(upper_matches[0].name, "FooEnum");
+    assert_eq!(lower_matches[0].name, "FooEnum");
 }
 
 #[test]

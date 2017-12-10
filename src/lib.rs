@@ -15,6 +15,7 @@ extern crate log;
 extern crate rls_data as data;
 extern crate rls_span as span;
 extern crate rustc_serialize;
+extern crate radix_trie;
 
 mod analysis;
 mod raw;
@@ -351,17 +352,18 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         })
     }
 
-    pub fn name_defs(&self, name: &str) -> AResult<Vec<Def>> {
+    /// Finds Defs with names that starting with (ignoring case) `stem`
+    pub fn matching_defs(&self, stem: &str) -> AResult<Vec<Def>> {
         let t_start = Instant::now();
         let result = self.with_analysis(|a| {
-            let defs = a.defs_for_name(name);
-            info!("defs_for_name {:?}", &defs);
+            let defs = a.matching_defs(stem);
+            info!("matching_defs {:?}", &defs);
             Some(defs)
         });
 
         let time = t_start.elapsed();
         info!(
-            "name_defs: {}",
+            "matching_defs: {}",
             time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0
         );
 
