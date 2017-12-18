@@ -26,7 +26,7 @@ mod util;
 #[cfg(test)]
 mod test;
 
-pub use analysis::{Def, Ref};
+pub use analysis::{Def, Ref, Import};
 use analysis::Analysis;
 pub use raw::{name_space_for_def_kind, read_analysis_from_files, CrateId, DefKind};
 pub use loader::{AnalysisLoader, CargoAnalysisLoader, Target};
@@ -284,6 +284,11 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                 .collect()
             )
         })
+    }
+
+    /// Returns all the imports in the analysis data.
+    pub fn find_all_imports(&self) -> AResult<Vec<Import>> {
+        self.with_analysis(|a| Some(a.for_all_crates(|c| Some(c.imports.clone()))))
     }
 
     pub fn id(&self, span: &Span) -> AResult<Id> {

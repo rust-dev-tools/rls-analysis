@@ -9,7 +9,7 @@
 //! For processing the raw save-analysis data from rustc into the rls
 //! in-memory representation.
 
-use analysis::{Def, Glob, PerCrateAnalysis, Ref};
+use analysis::{Def, Glob, Import, PerCrateAnalysis, Ref};
 use data;
 use raw::{self, RelationKind, CrateId};
 use {AResult, AnalysisHost, Id, Span, NULL};
@@ -176,6 +176,14 @@ impl CrateReader {
                 let def_id = self.id_from_compiler_id(ref_id);
                 self.record_ref(def_id, span, analysis, project_analysis);
             }
+
+            let import = Import {
+                kind: i.kind,
+                parent: i.parent.map(|id| self.id_from_compiler_id(&id)),
+                def_id: i.ref_id.map(|id| self.id_from_compiler_id(&id)),
+            };
+            trace!("record import {:?}", import);
+            analysis.imports.push(import);
         }
     }
 

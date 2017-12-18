@@ -8,7 +8,7 @@
 
 use {AnalysisLoader, Blacklist};
 use listings::{DirectoryListing, ListingKind};
-pub use data::{CratePreludeData, Def, DefKind, GlobalCrateId as CrateId, Import,
+pub use data::{CratePreludeData, Def, DefKind, GlobalCrateId as CrateId, Import, ImportKind,
                Ref, Relation, RelationKind, SigElement, Signature, SpanData};
 use data::Analysis;
 

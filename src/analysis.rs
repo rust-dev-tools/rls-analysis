@@ -12,7 +12,7 @@ use std::time::SystemTime;
 use radix_trie::{Trie, TrieCommon};
 
 use {Id, Span};
-use raw::{CrateId, DefKind};
+use raw::{CrateId, DefKind, ImportKind};
 
 /// This is the main database that contains all the collected symbol information,
 /// such as definitions, their mapping between spans, hierarchy and so on,
@@ -39,6 +39,7 @@ pub struct PerCrateAnalysis {
     pub ref_spans: HashMap<Id, Vec<Span>>,
     pub globs: HashMap<Span, Glob>,
     pub impls: HashMap<Id, Vec<Span>>,
+    pub imports: Vec<Import>,
 
     pub root_id: Option<Id>,
     pub timestamp: SystemTime,
@@ -89,6 +90,15 @@ pub struct Def {
 }
 
 #[derive(Debug, Clone)]
+pub struct Import {
+    pub kind: ImportKind,
+    pub parent: Option<Id>,
+
+    /// The imported def.
+    pub def_id: Option<Id>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Signature {
     pub span: Span,
     pub text: String,
@@ -123,6 +133,7 @@ impl PerCrateAnalysis {
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
             impls: HashMap::new(),
+            imports: Vec::new(),
             root_id: None,
             timestamp,
         }
