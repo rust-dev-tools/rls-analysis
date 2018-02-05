@@ -1,37 +1,35 @@
 #!/bin/bash
 # This script reproduces all save-analysis data in the test_data directories.
 
-# TODO currently this is broken. Cargo makes files of the form deps/save-analysis/foo-....json
-# now and you need to manually trim the -... before copying. Could probably fix
-# this script with a regex or something to handle that, but I don't have the script-fu.
+# $1 is where to run cargo build
+# $2 is the output dir
+function build {
+    echo "$1 => $2"
+    output="$(pwd)/$2"
+    pushd "$1" > /dev/null
+    RUSTFLAGS=-Zsave-analysis cargo build
+    cp target/debug/deps/save-analysis/*.json "$output"
+    # strip all hashes from filenames libfoo-[hash].json -> libfoo.json
+    for from in $output/*.json; do
+        to=$(echo "$from" | sed -e "s/\(.*\)-[a-f0-9]*.json/\1.json/1")
+        mv "$from" "$to"
+    done
+    popd > /dev/null
+}
 
 # Data for rls-analysis. This is essentially a bootstrap. Be careful when using
 # this data because the source is not pinned, therefore the data will change
 # regualarly. It should basically just be used as a 'big'-ish set of real-world
 # data for smoke testing.
 
-cd ..
-RUSTFLAGS=-Zsave-analysis cargo build
-rm test_data/rls-analysis/*
-cp target/debug/deps/save-analysis/*.json test_data/rls-analysis
-cd test_data
+rm rls-analysis/*.json
+build .. rls-analysis
 
 # Hello world test case
-cd hello
-RUSTFLAGS=-Zsave-analysis cargo build
-cp target/debug/deps/save-analysis/hello-*.json save-analysis
-#RUSTFLAGS=-Zsave-analysis-api cargo build
-#cp target/debug/save-analysis/hello.json save-analysis-api
-cd ..
+build hello hello/save-analysis
 
 # Types
-cd types
-RUSTFLAGS=-Zsave-analysis cargo build
-cp target/debug/deps/save-analysis/types-*.json save-analysis
-cd ..
+build types types/save-analysis
 
 # Expressions
-cd exprs
-RUSTFLAGS=-Zsave-analysis cargo build
-cp target/debug/deps/save-analysis/exprs-*.json save-analysis
-cd ..
+build exprs exprs/save-analysis
