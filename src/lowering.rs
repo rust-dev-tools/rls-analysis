@@ -311,8 +311,9 @@ impl CrateReader {
         project_analysis: &AnalysisHost<L>,
     ) {
         for r in relations {
-            if r.kind != RelationKind::Impl {
-                continue;
+            match r.kind {
+                RelationKind::Impl { .. } => {}
+                _ => continue,
             }
             let self_id = self.id_from_compiler_id(&r.from);
             let trait_id = self.id_from_compiler_id(&r.to);
