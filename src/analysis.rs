@@ -251,9 +251,9 @@ impl Analysis {
 
     pub fn with_ref_spans<F, T>(&self, id: Id, f: F) -> Option<T>
     where
-        F: Fn(&Vec<Span>) -> T,
+        F: Fn(&Vec<Span>) -> Option<T>,
     {
-        self.for_each_crate(|c| c.ref_spans.get(&id).map(&f))
+        self.for_each_crate(|c| c.ref_spans.get(&id).and_then(&f))
     }
 
     pub fn with_defs_per_file<F, T>(&self, file: &Path, f: F) -> Option<T>

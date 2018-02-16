@@ -315,11 +315,11 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                         for r in refs.iter() {
                             match a.ref_for_span(r) {
                                 Some(Ref::Id(_)) => {},
-                                _ => return vec![],
+                                _ => return None,
                             }
                         }
                     }
-                    refs.clone()
+                    Some(refs.clone())
                 });
                 refs.map(|refs| {
                     decl.into_iter()
@@ -380,10 +380,10 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                 defs.into_iter()
                     .flat_map(|id| {
                         a.with_ref_spans(*id, |refs| {
-                            def_span!(a, *id)
+                            Some(def_span!(a, *id)
                                 .into_iter()
                                 .chain(refs.iter().cloned())
-                                .collect::<Vec<_>>()
+                                .collect::<Vec<_>>())
                         }).or_else(|| def_span!(a, *id).map(|s| vec![s]))
                             .unwrap_or_else(Vec::new)
                             .into_iter()
@@ -406,10 +406,10 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         let t_start = Instant::now();
         let result = self.with_analysis(|a| {
             a.with_ref_spans(id, |refs| {
-                def_span!(a, id)
+                Some(def_span!(a, id)
                     .into_iter()
                     .chain(refs.iter().cloned())
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>())
             }).or_else(|| def_span!(a, id).map(|s| vec![s]))
         });
 
