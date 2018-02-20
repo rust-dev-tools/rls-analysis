@@ -58,6 +58,7 @@ pub struct SymbolResult {
     pub name: String,
     pub kind: raw::DefKind,
     pub span: Span,
+    pub parent: Option<Id>,
 }
 
 impl SymbolResult {
@@ -67,6 +68,7 @@ impl SymbolResult {
             name: def.name.clone(),
             span: def.span.clone(),
             kind: def.kind,
+            parent: def.parent,
         }
     }
 }
