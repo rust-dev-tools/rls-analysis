@@ -128,7 +128,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         self.reload_with_blacklist(path_prefix, base_dir, blacklist)?;
 
         let crates: Vec<_> = analysis.into_iter()
-            .map(|analysis| raw::Crate::new(analysis, SystemTime::now()))
+            .map(|analysis| raw::Crate::new(analysis, SystemTime::now(), None))
             .collect();
 
         lowering::lower(

@@ -147,7 +147,7 @@ impl CrateReader {
             base_dir,
         );
 
-        let mut per_crate = PerCrateAnalysis::new(krate.timestamp);
+        let mut per_crate = PerCrateAnalysis::new(krate.timestamp, krate.path);
 
         let is_distro_crate = krate.analysis.config.distro_crate;
         reader.read_defs(krate.analysis.defs, &mut per_crate, is_distro_crate);

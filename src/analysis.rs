@@ -42,6 +42,7 @@ pub struct PerCrateAnalysis {
 
     pub root_id: Option<Id>,
     pub timestamp: SystemTime,
+    pub path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -112,7 +113,7 @@ pub struct Glob {
 
 
 impl PerCrateAnalysis {
-    pub fn new(timestamp: SystemTime) -> PerCrateAnalysis {
+    pub fn new(timestamp: SystemTime, path: Option<PathBuf>) -> PerCrateAnalysis {
         PerCrateAnalysis {
             def_id_for_span: HashMap::new(),
             defs: HashMap::new(),
@@ -125,6 +126,7 @@ impl PerCrateAnalysis {
             impls: HashMap::new(),
             root_id: None,
             timestamp,
+            path,
         }
     }
 }
@@ -139,10 +141,11 @@ impl Analysis {
         }
     }
 
-    pub fn timestamps(&self) -> HashMap<CrateId, SystemTime> {
+    pub fn timestamps(&self) -> HashMap<PathBuf, SystemTime> {
         self.per_crate
-            .iter()
-            .map(|(id, c)| (id.clone(), c.timestamp.clone()))
+            .values()
+            .filter(|c| c.path.is_some())
+            .map(|c| (c.path.as_ref().unwrap().clone(), c.timestamp.clone()))
             .collect()
     }
 
