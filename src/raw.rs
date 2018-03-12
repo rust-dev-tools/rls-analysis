@@ -9,7 +9,7 @@
 use {AnalysisLoader, Blacklist};
 use listings::{DirectoryListing, ListingKind};
 pub use data::{CratePreludeData, Def, DefKind, GlobalCrateId as CrateId, Import,
-               Ref, Relation, RelationKind, SigElement, Signature, SpanData};
+               Ref, Relation, RelationKind, Impl, ImplKind, SigElement, Signature, SpanData};
 use data::Analysis;
 
 use std::collections::HashMap;

@@ -9,7 +9,7 @@
 //! For processing the raw save-analysis data from rustc into the rls
 //! in-memory representation.
 
-use analysis::{Def, Glob, PerCrateAnalysis, Ref};
+use analysis::{Def, Impl, Glob, PerCrateAnalysis, Ref};
 use data;
 use raw::{self, RelationKind, CrateId};
 use {AResult, AnalysisHost, Id, Span, NULL};
@@ -24,6 +24,9 @@ use std::iter::Extend;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::u32;
+
+// impl ids are just a counter from 0.
+static IMPL_ID_START: u64 = <u64>::max_value() - 1_000_000;
 
 // f is a function used to record the lowered crate into analysis.
 pub fn lower<F, L>(
@@ -153,7 +156,8 @@ impl CrateReader {
         reader.read_defs(krate.analysis.defs, &mut per_crate, is_distro_crate);
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
-        reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
+        reader.read_impls(krate.analysis.impls, &mut per_crate, project_analysis);
+        reader.read_relations(krate.analysis.relations, &mut per_crate, project_analysis);
 
         (per_crate, krate.id)
     }
@@ -236,7 +240,7 @@ impl CrateReader {
                 if d.name != "" {
                     analysis.def_trie.map_with_default(d.name.to_lowercase(), |v| v.push(id), vec![id]);
                 }
-                
+
                 let parent = d.parent.map(|id| self.id_from_compiler_id(&id));
                 if let Some(parent) = parent {
                     let children = analysis
@@ -306,15 +310,38 @@ impl CrateReader {
 
     fn read_impls<L: AnalysisLoader>(
         &self,
+        impls: Vec<raw::Impl>,
+        analysis: &mut PerCrateAnalysis,
+        _project_analysis: &AnalysisHost<L>,
+    ) {
+        for i in impls {
+            let impl_id = Id(IMPL_ID_START + i.id as u64);
+            let span = lower_span(&i.span, &self.base_dir);
+            analysis.impls.insert(impl_id, span.clone());
+            let def = Impl {
+                kind: i.kind,
+                span: span,
+                children: i.children
+                    .iter()
+                    .map(|id| self.id_from_compiler_id(&id))
+                    .collect()
+            };
+            analysis.impl_defs.insert(impl_id, def);
+        }
+    }
+
+    fn read_relations<L: AnalysisLoader>(
+        &self,
         relations: Vec<raw::Relation>,
         analysis: &mut PerCrateAnalysis,
         project_analysis: &AnalysisHost<L>,
     ) {
         for r in relations {
-            match r.kind {
-                RelationKind::Impl { .. } => {}
+            // impl_id is a u32 "local" id to tie the relation to the impl.
+            let impl_id = match r.kind {
+                RelationKind::Impl { ref id } => Id(IMPL_ID_START + *id as u64),
                 _ => continue,
-            }
+            };
             let self_id = self.id_from_compiler_id(&r.from);
             let trait_id = self.id_from_compiler_id(&r.to);
             let span = lower_span(&r.span, &self.base_dir);
@@ -322,20 +349,20 @@ impl CrateReader {
                 if let Some(self_id) = abs_ref_id(self_id, analysis, project_analysis) {
                     trace!("record impl for self type {:?} {}", span, self_id);
                     analysis
-                        .impls
+                        .impl_ids
                         .entry(self_id)
-                        .or_insert_with(|| vec![])
-                        .push(span.clone());
+                        .or_insert_with(|| HashSet::new())
+                        .insert(impl_id);
                 }
             }
             if trait_id != NULL {
                 if let Some(trait_id) = abs_ref_id(trait_id, analysis, project_analysis) {
                     trace!("record impl for trait {:?} {}", span, trait_id);
                     analysis
-                        .impls
+                        .impl_ids
                         .entry(trait_id)
-                        .or_insert_with(|| vec![])
-                        .push(span);
+                        .or_insert_with(|| HashSet::new())
+                        .insert(impl_id);
                 }
             }
         }

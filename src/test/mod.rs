@@ -6,16 +6,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use {AnalysisHost, AnalysisLoader};
+use {AnalysisHost, AnalysisLoader, Span};
 use raw::DefKind;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use span::{Row, Column, Position, Range};
 
 #[cfg(test)]
 extern crate env_logger;
 
-#[derive(Clone, new)]
+#[derive(Clone, new, Debug)]
 struct TestAnalysisLoader {
     path: PathBuf,
 }
@@ -376,4 +377,58 @@ fn test_extern_fn() {
     assert_eq!(spans.len(), 2);
     let def = host.goto_def(&spans[1]);
     assert_eq!(def.unwrap(), spans[0]);
+}
+
+#[test]
+fn test_trait_refs_defs() {
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/traits/save-analysis").to_owned(),
+    ));
+    host.reload(
+        Path::new("test_data/traits"),
+        Path::new("test_data/traits"),
+    ).unwrap();
+
+    // make a span for row 4:
+    //     let _ignored = mymod::MyStruct.trait_fn();
+    //                                    --------
+    let row = Row::new_one_indexed(4);
+    let col_start = Column::new_one_indexed(36);
+    let col_end = Column::new_one_indexed(44);
+    let pos_start = Position::new(row, col_start);
+    let pos_end = Position::new(row, col_end);
+    let range = Range::from_positions(pos_start, pos_end).zero_indexed();
+
+    let span = Span::from_range(range, "test_data/traits/src/main.rs");
+
+    // this is an id for a Method of the Trait (not the Impl).
+    let id = host.crate_local_id(&span).expect("No id for span");
+
+    println!("id for span {:?}", id);
+
+    // Def { kind: Method, ... } of the Trait
+    let def = host.get_def(id.clone()).expect("No def for id");
+
+    println!("def for id {:?}", def);
+
+    // references to the method
+    let _spans = host.find_all_refs(&span, true, true).expect("No refs for span");
+
+    println!("ref spans {:?}", _spans);
+
+    // TODO below we go awry... we don't necessarily want to step up to the
+    // type level, just to go down on method level again in the trait, or do we?
+    // regardless, it seems the find_impls() needs some help to work with
+    // type id connected to trait id, rather than the span.
+
+    // // the type that owns the method
+    // let typ = def.parent.expect("No parent for method");
+
+    // // the impls of the type, which are just spans for the
+    // // impl rows i.e.:
+    // //     impl MyTrait for MyStruct {
+    // let impls = host.find_impls(typ);
+
+    // println!("{:?}", impls);
+
 }

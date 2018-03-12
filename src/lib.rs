@@ -425,7 +425,16 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     pub fn find_impls(&self, id: Id) -> AResult<Vec<Span>> {
         self.with_analysis(|a| {
-            Some(a.for_all_crates(|c| c.impls.get(&id).cloned()))
+            Some(a.for_all_crates(|c| c.impl_ids.get(&id)
+                .map(|ids| ids
+                    .iter()
+                    // relations and impls are emitted at the same time by save-analysis,
+                    // unwrap() should be ok.
+                    .map(|impl_id| c.impls.get(impl_id).unwrap())
+                    .cloned()
+                    .collect()
+                )
+            ))
         })
     }
 

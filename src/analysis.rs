@@ -12,7 +12,7 @@ use std::time::SystemTime;
 use radix_trie::{Trie, TrieCommon};
 
 use {Id, Span};
-use raw::{CrateId, DefKind};
+use raw::{CrateId, DefKind, ImplKind};
 
 /// This is the main database that contains all the collected symbol information,
 /// such as definitions, their mapping between spans, hierarchy and so on,
@@ -28,18 +28,23 @@ pub struct Analysis {
 
 #[derive(Debug)]
 pub struct PerCrateAnalysis {
-    // Map span to id of def (either because it is the span of the def, or of
-    // the def for the ref).
+    /// Map span to id of def (either because it is the span of the def, or of
+    /// the def for the ref).
     pub def_id_for_span: HashMap<Span, Ref>,
+    /// All definitions that can be Ref:ed.
     pub defs: HashMap<Id, Def>,
+    /// Map of id to Impl.
+    pub impl_defs: HashMap<Id, Impl>,
     pub defs_per_file: HashMap<PathBuf, Vec<Id>>,
     pub children: HashMap<Id, HashSet<Id>>,
     pub def_names: HashMap<String, Vec<Id>>,
     pub def_trie: Trie<String, Vec<Id>>,
     pub ref_spans: HashMap<Id, Vec<Span>>,
     pub globs: HashMap<Span, Glob>,
-    pub impls: HashMap<Id, Vec<Span>>,
-
+    /// Map of self_type id and trait_id to impl id
+    pub impl_ids: HashMap<Id, HashSet<Id>>,
+    /// Map of impl id to the span of the impl.
+    pub impls: HashMap<Id, Span>,
     pub root_id: Option<Id>,
     pub timestamp: SystemTime,
     pub path: Option<PathBuf>,
@@ -90,6 +95,13 @@ pub struct Def {
 }
 
 #[derive(Debug, Clone)]
+pub struct Impl {
+    pub kind: ImplKind,
+    pub span: Span,
+    pub children: Vec<Id>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Signature {
     pub span: Span,
     pub text: String,
@@ -123,7 +135,9 @@ impl PerCrateAnalysis {
             def_trie: Trie::new(),
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
+            impl_ids: HashMap::new(),
             impls: HashMap::new(),
+            impl_defs: HashMap::new(),
             root_id: None,
             timestamp,
             path,
@@ -256,7 +270,9 @@ impl Analysis {
     where
         F: Fn(&Vec<Span>) -> Option<T>,
     {
-        self.for_each_crate(|c| c.ref_spans.get(&id).and_then(&f))
+        self.for_each_crate(|c| {
+            c.ref_spans.get(&id).and_then(&f)
+        })
     }
 
     pub fn with_defs_per_file<F, T>(&self, file: &Path, f: F) -> Option<T>
@@ -271,7 +287,7 @@ impl Analysis {
 
         self.for_all_crates(|c| {
             c.def_trie.get_raw_descendant(&lowered_stem).map(|s| {
-                s.values().flat_map(|ids| 
+                s.values().flat_map(|ids|
                     ids.iter().flat_map(|id| c.defs.get(id)).cloned()
                 ).collect()
             })

@@ -8,6 +8,7 @@ function build {
     output="$(pwd)/$2"
     pushd "$1" > /dev/null
     RUSTFLAGS=-Zsave-analysis cargo build
+    mkdir -p "$output"
     cp target/debug/deps/save-analysis/*.json "$output"
     # strip all hashes from filenames libfoo-[hash].json -> libfoo.json
     for from in $output/*.json; do
@@ -33,3 +34,6 @@ build types types/save-analysis
 
 # Expressions
 build exprs exprs/save-analysis
+
+# Traits
+build traits traits/save-analysis
