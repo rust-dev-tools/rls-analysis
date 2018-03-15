@@ -6,6 +6,9 @@ description = "Library for processing rustc's save-analysis data for the RLS"
 license = "Apache-2.0/MIT"
 repository = "https://github.com/nrc/rls-analysis"
 categories = ["development-tools"]
+exclude = [
+    "test_data/*",
+]
 
 [dependencies]
 rustc-serialize = "0.3"
