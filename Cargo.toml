@@ -12,7 +12,7 @@ exclude = [
 
 [dependencies]
 rustc-serialize = "0.3"
-log = "0.3"
+log = "0.4"
 rls-data = "= 0.15"
 rls-span = "0.4"
 derive-new = "0.5"
