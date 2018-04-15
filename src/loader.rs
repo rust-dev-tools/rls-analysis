@@ -70,18 +70,13 @@ impl AnalysisLoader for CargoAnalysisLoader {
         let path_prefix = self.path_prefix.as_ref().unwrap();
         let target = self.target.to_string();
 
-        // TODO sys_root_path allows to break out of 'sandbox' - is that Ok?
-        let principle_path = path_prefix
-            .join("target")
-            .join("rls")
-            .join(&target)
-            .join("save-analysis");
         let deps_path = path_prefix
             .join("target")
             .join("rls")
             .join(&target)
             .join("deps")
             .join("save-analysis");
+        // FIXME sys_root_path allows to break out of 'sandbox' - is that Ok?
         let sys_root_path = sys_root_path();
         let target_triple = extract_target_triple(sys_root_path.as_path());
         let libs_path = sys_root_path
@@ -90,7 +85,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
             .join(&target_triple)
             .join("analysis");
 
-        vec![libs_path, deps_path, principle_path]
+        vec![libs_path, deps_path]
     }
 }
 
