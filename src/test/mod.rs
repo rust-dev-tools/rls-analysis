@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use {AnalysisHost, AnalysisLoader};
+use loader::SearchDirectory;
 use raw::DefKind;
 
 use std::collections::HashSet;
@@ -35,7 +36,9 @@ impl AnalysisLoader for TestAnalysisLoader {
         panic!();
     }
 
-    fn search_directories(&self) -> Vec<PathBuf> { vec![self.path.clone()] }
+    fn search_directories(&self) -> Vec<SearchDirectory> {
+        vec![SearchDirectory::new(self.path.clone(), None)]
+    }
 }
 
 #[test]

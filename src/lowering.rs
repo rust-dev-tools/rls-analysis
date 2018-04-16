@@ -68,9 +68,17 @@ where
     Ok(())
 }
 
-fn lower_span(raw_span: &raw::SpanData, base_dir: &Path) -> Span {
+fn lower_span(raw_span: &raw::SpanData, base_dir: &Path, path_rewrite: &Option<PathBuf>) -> Span {
     let file_name = &raw_span.file_name;
-    let file_name = if file_name.is_absolute() {
+
+    // Go from relative to absolute paths.
+    let file_name = if let &Some(ref prefix) = path_rewrite {
+        // Invariant: !file_name.is_absolute()
+        // We don't assert this because better to have an incorrect span than to
+        // panic.
+        let prefix = &Path::new(prefix);
+        prefix.join(file_name)
+    } else if file_name.is_absolute() {
         file_name.to_owned()
     } else {
         base_dir.join(file_name)
@@ -95,6 +103,7 @@ struct CrateReader {
     crate_map: Vec<u32>,
     base_dir: PathBuf,
     crate_name: String,
+    path_rewrite: Option<PathBuf>,
 }
 
 impl CrateReader {
@@ -102,6 +111,7 @@ impl CrateReader {
         mut prelude: raw::CratePreludeData,
         master_crate_map: &mut HashMap<CrateId, u32>,
         base_dir: &Path,
+        path_rewrite: Option<PathBuf>,
     ) -> CrateReader {
         fn fetch_crate_index(map: &mut HashMap<CrateId, u32>,
                              id: data::GlobalCrateId) -> u32 {
@@ -132,6 +142,7 @@ impl CrateReader {
             crate_map,
             base_dir: base_dir.to_owned(),
             crate_name: crate_id.name,
+            path_rewrite,
         }
     }
 
@@ -145,6 +156,7 @@ impl CrateReader {
             krate.analysis.prelude.unwrap(),
             &mut project_analysis.master_crate_map.lock().unwrap(),
             base_dir,
+            krate.path_rewrite,
         );
 
         let mut per_crate = PerCrateAnalysis::new(krate.timestamp, krate.path);
@@ -165,7 +177,7 @@ impl CrateReader {
         project_analysis: &AnalysisHost<L>,
     ) {
         for i in imports {
-            let span = lower_span(&i.span, &self.base_dir);
+            let span = lower_span(&i.span, &self.base_dir, &self.path_rewrite);
             if !i.value.is_empty() {
                 // A glob import.
                 let glob = Glob { value: i.value };
@@ -207,7 +219,7 @@ impl CrateReader {
 
     fn read_defs(&self, defs: Vec<raw::Def>, analysis: &mut PerCrateAnalysis, distro_crate: bool) {
         for d in defs {
-            let span = lower_span(&d.span, &self.base_dir);
+            let span = lower_span(&d.span, &self.base_dir, &self.path_rewrite);
             let id = self.id_from_compiler_id(&d.id);
             if id != NULL && !analysis.defs.contains_key(&id) {
                 let file_name = span.file.clone();
@@ -299,7 +311,7 @@ impl CrateReader {
     ) {
         for r in refs {
             let def_id = self.id_from_compiler_id(&r.ref_id);
-            let span = lower_span(&r.span, &self.base_dir);
+            let span = lower_span(&r.span, &self.base_dir, &self.path_rewrite);
             self.record_ref(def_id, span, analysis, project_analysis);
         }
     }
@@ -317,7 +329,7 @@ impl CrateReader {
             }
             let self_id = self.id_from_compiler_id(&r.from);
             let trait_id = self.id_from_compiler_id(&r.to);
-            let span = lower_span(&r.span, &self.base_dir);
+            let span = lower_span(&r.span, &self.base_dir, &self.path_rewrite);
             if self_id != NULL {
                 if let Some(self_id) = abs_ref_id(self_id, analysis, project_analysis) {
                     trace!("record impl for self type {:?} {}", span, self_id);
@@ -343,7 +355,7 @@ impl CrateReader {
 
     // fn lower_sig(&self, raw_sig: &raw::Signature, base_dir: &Path) -> Signature {
     //     Signature {
-    //         span: lower_span(&raw_sig.span, base_dir),
+    //         span: lower_span(&raw_sig.span, base_dir, &self.path_rewrite),
     //         text: raw_sig.text.clone(),
     //         ident_start: raw_sig.ident_start as u32,
     //         ident_end: raw_sig.ident_end as u32,

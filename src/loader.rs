@@ -25,6 +25,16 @@ pub struct CargoAnalysisLoader {
     pub target: Target,
 }
 
+#[derive(Debug, new)]
+pub struct SearchDirectory {
+    pub path: PathBuf,
+    // The directory searched must have spans re-written to be based on a new
+    // path prefix. This happens for example when the std lib crates are compiled
+    // on the Rust CI, but live in the user's sysroot directory, this adjustment
+    // (which happens in `lower_span`) means we have the new source location.
+    pub prefix_rewrite: Option<PathBuf>,
+}
+
 impl CargoAnalysisLoader {
     pub fn new(target: Target) -> CargoAnalysisLoader {
         CargoAnalysisLoader {
@@ -42,7 +52,7 @@ pub trait AnalysisLoader: Sized {
     fn set_path_prefix(&mut self, path_prefix: &Path);
     fn abs_path_prefix(&self) -> Option<PathBuf>;
     /// Returns every directory in which analysis files are to be considered.
-    fn search_directories(&self) -> Vec<PathBuf>;
+    fn search_directories(&self) -> Vec<SearchDirectory>;
 }
 
 impl AnalysisLoader for CargoAnalysisLoader {
@@ -66,7 +76,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
             .map(|s| Path::new(s).canonicalize().unwrap().to_owned())
     }
 
-    fn search_directories(&self) -> Vec<PathBuf> {
+    fn search_directories(&self) -> Vec<SearchDirectory> {
         let path_prefix = self.path_prefix.as_ref().unwrap();
         let target = self.target.to_string();
 
@@ -85,7 +95,17 @@ impl AnalysisLoader for CargoAnalysisLoader {
             .join(&target_triple)
             .join("analysis");
 
-        vec![libs_path, deps_path]
+        let src_path = sys_root_path
+            .join("lib")
+            .join("rustlib")
+            .join("src")
+            .join("rust")
+            .join("src");
+
+        vec![
+            SearchDirectory::new(libs_path, Some(src_path)),
+            SearchDirectory::new(deps_path, None),
+        ]
     }
 }
 

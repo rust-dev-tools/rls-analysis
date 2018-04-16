@@ -24,15 +24,17 @@ pub struct Crate {
     pub analysis: Analysis,
     pub timestamp: SystemTime,
     pub path: Option<PathBuf>,
+    pub path_rewrite: Option<PathBuf>,
 }
 
 impl Crate {
-    pub fn new(analysis: Analysis, timestamp: SystemTime, path: Option<PathBuf>) -> Crate {
+    pub fn new(analysis: Analysis, timestamp: SystemTime, path: Option<PathBuf>, path_rewrite: Option<PathBuf>) -> Crate {
         Crate {
             id: analysis.prelude.as_ref().unwrap().crate_id.clone(),
             analysis,
             timestamp,
             path,
+            path_rewrite,
         }
     }
 }
@@ -48,9 +50,9 @@ pub fn read_analysis_from_files<L: AnalysisLoader>(
 
     loader.search_directories()
         .iter()
-        .inspect(|path| trace!("Considering analysis files at {}", path.display()))
-        .filter_map(|p| DirectoryListing::from_path(p).ok().map(|list| (p, list)))
-        .for_each(|(p, listing)| {
+        .inspect(|dir| trace!("Considering analysis files at {}", dir.path.display()))
+        .filter_map(|dir| DirectoryListing::from_path(&dir.path).ok().map(|list| (dir, list)))
+        .for_each(|(dir, listing)| {
             let t = Instant::now();
 
             for l in listing.files {
@@ -60,11 +62,11 @@ pub fn read_analysis_from_files<L: AnalysisLoader>(
                         continue;
                     }
 
-                    let path = p.join(&l.name);
+                    let path = dir.path.join(&l.name);
                     let is_fresh = crate_timestamps.get(&path).map_or(true, |t| time > t);
                     if is_fresh {
                         read_crate_data(&path).map(|analysis| {
-                            result.push(Crate::new(analysis, *time, Some(path)));
+                            result.push(Crate::new(analysis, *time, Some(path), dir.prefix_rewrite.clone()));
                         });
                     }
                 }
@@ -74,7 +76,7 @@ pub fn read_analysis_from_files<L: AnalysisLoader>(
             info!(
                 "reading {} crates from {} in {}.{:09}s",
                 result.len(),
-                p.display(),
+                dir.path.display(),
                 d.as_secs(),
                 d.subsec_nanos()
             );
