@@ -19,7 +19,7 @@ function build {
 
 # Data for rls-analysis. This is essentially a bootstrap. Be careful when using
 # this data because the source is not pinned, therefore the data will change
-# regualarly. It should basically just be used as a 'big'-ish set of real-world
+# regularly. It should basically just be used as a 'big'-ish set of real-world
 # data for smoke testing.
 
 rm rls-analysis/*.json

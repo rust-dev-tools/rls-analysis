@@ -65,10 +65,9 @@ fn doc_urls_resolve_correctly() {
                 qualname.is_none() || def.qualname == qualname.unwrap()
             })
             .collect();
-        println!("{}: {:#?}", type_, defs);
-        // FIXME (#133) Get tests passing again
-        // assert_eq!(defs.len(), 1);
-        // assert_eq!(host.doc_url(&defs[0].span), Ok(url.into()));
+        trace!("{}: {:#?}", type_, defs);
+        assert_eq!(defs.len(), 1);
+        assert_eq!(host.doc_url(&defs[0].span), Ok(url.into()));
     }
 
     // FIXME This test cannot work for some values
@@ -122,7 +121,7 @@ fn doc_urls_resolve_correctly() {
     assert_url_for_type(
         &host,
         "is_ascii",
-        None,
+        "std::ascii::AsciiExt::is_ascii",
         "https://doc.rust-lang.org/nightly/std/ascii/AsciiExt.t.html#is_ascii.v",
     );
     assert_url_for_type(
@@ -363,10 +362,9 @@ fn test_self() {
         .unwrap();
 
     let spans = host.search("self").unwrap();
-    // FIXME (#133) Get tests passing again
-    // assert_eq!(spans.len(), 2);
-    // let def = host.goto_def(&spans[1]);
-    // assert_eq!(def.unwrap(), spans[0]);
+    assert_eq!(spans.len(), 2);
+    let def = host.goto_def(&spans[1]);
+    assert_eq!(def.unwrap(), spans[0]);
 }
 
 #[test]
@@ -378,8 +376,7 @@ fn test_extern_fn() {
         .unwrap();
 
     let spans = host.search("foo").unwrap();
-    // FIXME (#133) Get tests passing again
-    // assert_eq!(spans.len(), 2);
-    // let def = host.goto_def(&spans[1]);
-    // assert_eq!(def.unwrap(), spans[0]);
+    assert_eq!(spans.len(), 2);
+    let def = host.goto_def(&spans[1]);
+    assert_eq!(def.unwrap(), spans[0]);
 }
