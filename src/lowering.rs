@@ -187,6 +187,10 @@ impl CrateReader {
                 // Import where we know the referred def.
                 let def_id = self.id_from_compiler_id(ref_id);
                 self.record_ref(def_id, span, analysis, project_analysis);
+                if let Some(alias_span) = i.alias_span {
+                    let alias_span = lower_span(&alias_span, &self.base_dir, &self.path_rewrite);
+                    self.record_ref(def_id, alias_span, analysis, project_analysis);
+                }
             }
         }
     }
