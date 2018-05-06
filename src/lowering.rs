@@ -228,12 +228,16 @@ impl CrateReader {
                     .entry(file_name)
                     .or_insert_with(|| vec![])
                     .push(id);
+                let decl_id = match d.decl_id {
+                    Some(ref decl_id) => Ref::Double(self.id_from_compiler_id(decl_id), id),
+                    None => Ref::Id(id),
+                };
                 match analysis.def_id_for_span.entry(span.clone()) {
                     Entry::Occupied(_) => {
                         debug!("def already exists at span: {:?} {:?}", span, d);
                     }
                     Entry::Vacant(ve) => {
-                        ve.insert(Ref::Id(id));
+                        ve.insert(decl_id);
                     }
                 }
 
