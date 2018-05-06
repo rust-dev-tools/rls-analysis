@@ -307,6 +307,9 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         let t_start = Instant::now();
         let result = self.with_analysis(|a| {
             a.def_id_for_span(span).map(|id| {
+                if force_unique_spans && a.aliased_imports.contains(&id) {
+                    return vec![];
+                }
                 let decl = if include_decl {
                     def_span!(a, id)
                 } else {

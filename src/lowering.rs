@@ -190,6 +190,8 @@ impl CrateReader {
                 if let Some(alias_span) = i.alias_span {
                     let alias_span = lower_span(&alias_span, &self.base_dir, &self.path_rewrite);
                     self.record_ref(def_id, alias_span, analysis, project_analysis);
+                    let mut analysis = project_analysis.analysis.lock().unwrap();
+                    analysis.as_mut().unwrap().aliased_imports.insert(def_id);
                 }
             }
         }

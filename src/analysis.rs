@@ -22,6 +22,15 @@ pub struct Analysis {
     /// Contains lowered data with global inter-crate `Id`s per each crate.
     pub per_crate: HashMap<CrateId, PerCrateAnalysis>,
 
+    // This is a bit of a hack and should be considered temporary. A def has an
+    // entry if there exists an import of the def which aliases it. We use this
+    // for find_all_refs with unique spans to ensure that clients don't rename a
+    // definition when they only mean to rename an alias.
+    //
+    // In the future we should handle imports, in particular aliasing ones, more
+    // explicitly and then this can be removed.
+    pub(crate) aliased_imports: HashSet<Id>,
+
     pub doc_url_base: String,
     pub src_url_base: String,
 }
@@ -135,6 +144,7 @@ impl Analysis {
     pub fn new() -> Analysis {
         Analysis {
             per_crate: HashMap::new(),
+            aliased_imports: HashSet::new(),
             // TODO don't hardcode these
             doc_url_base: "https://doc.rust-lang.org/nightly".to_owned(),
             src_url_base: "https://github.com/rust-lang/rust/blob/master".to_owned(),
