@@ -33,3 +33,6 @@ build types types/save-analysis
 
 # Expressions
 build exprs exprs/save-analysis
+
+# all_ref_unique
+build rename rename/save-analysis

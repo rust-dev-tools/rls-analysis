@@ -380,3 +380,22 @@ fn test_extern_fn() {
     let def = host.goto_def(&spans[1]);
     assert_eq!(def.unwrap(), spans[0]);
 }
+
+#[test]
+fn test_all_ref_unique() {
+    let host = AnalysisHost::new_with_loader(TestAnalysisLoader::new(
+        Path::new("test_data/rename/save-analysis").to_owned(),
+    ));
+    host.reload(Path::new("test_data/rename"), Path::new("test_data/rename"))
+        .unwrap();
+
+    let spans = host.search("bar").unwrap();
+    assert_eq!(spans.len(), 4);
+    let refs = host.find_all_refs(&spans[3], true, true);
+    assert_eq!(refs.unwrap().len(), 0);
+
+    let spans = host.search("qux").unwrap();
+    assert_eq!(spans.len(), 3);
+    let refs = host.find_all_refs(&spans[2], true, true);
+    assert_eq!(refs.unwrap().len(), 3);
+}
