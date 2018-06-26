@@ -19,5 +19,5 @@ derive-new = "0.5"
 radix_trie = "0.1"
 
 [dev-dependencies]
-lazy_static = "0.2"
-env_logger = "0.3"
+lazy_static = "1"
+env_logger = "0.5"
