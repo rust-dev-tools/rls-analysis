@@ -1,54 +1,22 @@
 use fst;
 
-pub fn subsequence<'q>(query: &'q str) -> impl fst::Automaton + 'q {
-    FstSubSeq { query }
+pub fn subsequence<'q>(query: &'q str) -> FstQuery<'q> {
+    FstQuery { query, subseq: true }
 }
 
-pub fn prefix<'q>(query: &'q str) -> impl fst::Automaton + 'q {
-    FstPrefix { query }
+pub fn prefix<'q>(query: &'q str) -> FstQuery<'q> {
+    FstQuery { query, subseq: false }
 }
-
 
 #[derive(Clone, Copy)]
-struct FstSubSeq<'a> { query: &'a str }
-
-impl<'a> fst::Automaton for FstSubSeq<'a> {
-    type State = usize;
-
-    fn start(&self) -> usize {
-        0
-    }
-
-    fn is_match(&self, &state: &usize) -> bool {
-        state == self.query.len()
-    }
-
-    fn accept(&self, &state: &usize, byte: u8) -> usize {
-        if state >= self.query.len() {
-            return state;
-        }
-        if byte == self.query.as_bytes()[state] {
-            return state + 1;
-        }
-        return state;
-    }
-
-    fn can_match(&self, _: &usize) -> bool {
-        true
-    }
-
-    fn will_always_match(&self, &state: &usize) -> bool {
-        state == self.query.len()
-    }
+pub struct FstQuery<'a> {
+    query: &'a str,
+    subseq: bool,
 }
-
-
-#[derive(Clone, Copy)]
-struct FstPrefix<'a> { query: &'a str }
 
 const NO_MATCH: usize = !0;
 
-impl<'a> fst::Automaton for FstPrefix<'a> {
+impl<'a> fst::Automaton for FstQuery<'a> {
     type State = usize;
 
     fn start(&self) -> usize {
@@ -61,7 +29,7 @@ impl<'a> fst::Automaton for FstPrefix<'a> {
 
     fn accept(&self, &state: &usize, byte: u8) -> usize {
         if state == NO_MATCH {
-            return NO_MATCH;
+            return state;
         }
         if state == self.query.len() {
             return state;
@@ -69,7 +37,7 @@ impl<'a> fst::Automaton for FstPrefix<'a> {
         if byte == self.query.as_bytes()[state] {
             return state + 1;
         }
-        return NO_MATCH;
+        if self.subseq { state } else { NO_MATCH }
     }
 
     fn can_match(&self, &state: &usize) -> bool {

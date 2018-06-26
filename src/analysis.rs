@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::iter;
-use fst::{self, IntoStreamer};
+use fst::{self, IntoStreamer, Streamer};
 
 use {Id, Span};
 use raw::{CrateId, DefKind};
@@ -145,6 +145,17 @@ impl PerCrateAnalysis {
             path,
         }
     }
+}
+
+pub struct MatchingDefsQuery {
+    pub kind: MatchingDefsQueryKind,
+    pub limit: usize,
+    pub greater_than: String,
+}
+
+pub enum MatchingDefsQueryKind {
+    Preifx(String),
+    SubSequence(String),
 }
 
 impl Analysis {
@@ -284,19 +295,42 @@ impl Analysis {
     }
 
     pub fn matching_defs(&self, stem: &str) -> Vec<Def> {
-        let lowered_stem = stem.to_lowercase();
-
-        self.for_all_crates(|c| {
-            let defs = c.def_fst.search(fstq::prefix(&lowered_stem))
-                .into_stream()
-                .into_values()
-                .into_iter()
-                .flat_map(|idx| {
-                    let idx = idx as usize;
-                    c.def_fst_values[idx].iter().flat_map(|id| c.defs.get(id)).cloned()
-                }).collect();
-            Some(defs)
+        self.matching_defs_q(MatchingDefsQuery {
+            kind: MatchingDefsQueryKind::Preifx(stem.to_lowercase()),
+            limit: <usize>::max_value(),
+            greater_than: String::new(),
         })
+    }
+
+    pub fn matching_defs_q(&self, query: MatchingDefsQuery) -> Vec<Def> {
+        let searcher = match &query.kind {
+            MatchingDefsQueryKind::SubSequence(p) => fstq::subsequence(p),
+            MatchingDefsQueryKind::Preifx(p) => fstq::prefix(p),
+        };
+
+        let mut stream = fst::map::OpBuilder::new();
+
+        let mut crates = Vec::new();
+        for c in self.per_crate.values() {
+            stream = stream.add(
+                c.def_fst.search(searcher).gt(&query.greater_than)
+            );
+            crates.push(c);
+        }
+        let mut stream = stream.union();
+        let mut res = Vec::new();
+        while let Some((_, entries)) = stream.next() {
+            for e in entries {
+                let c = &crates[e.index];
+                res.extend(
+                    c.def_fst_values[e.value as usize].iter().flat_map(|id| c.defs.get(id)).cloned()
+                );
+            }
+            if res.len() > query.limit {
+                break;
+            }
+        }
+        res
     }
 
     pub fn with_def_names<F, T>(&self, name: &str, f: F) -> Vec<T>
