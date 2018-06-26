@@ -17,6 +17,7 @@ rls-data = "= 0.16"
 rls-span = "0.4"
 derive-new = "0.5"
 radix_trie = "0.1"
+fst = "0.3"
 
 [dev-dependencies]
 lazy_static = "1"

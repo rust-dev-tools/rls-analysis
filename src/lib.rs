@@ -16,6 +16,7 @@ extern crate rls_data as data;
 extern crate rls_span as span;
 extern crate rustc_serialize;
 extern crate radix_trie;
+extern crate fst;
 
 mod analysis;
 mod raw;
