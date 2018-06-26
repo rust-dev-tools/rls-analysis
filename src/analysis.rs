@@ -9,7 +9,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use std::iter;
 use radix_trie::{Trie, TrieCommon};
+use fst;
 
 use {Id, Span};
 use raw::{CrateId, DefKind};
@@ -45,6 +47,8 @@ pub struct PerCrateAnalysis {
     pub children: HashMap<Id, HashSet<Id>>,
     pub def_names: HashMap<String, Vec<Id>>,
     pub def_trie: Trie<String, Vec<Id>>,
+    pub def_fst: fst::Map,
+    pub def_fst_values: Vec<Vec<Id>>,
     pub ref_spans: HashMap<Id, Vec<Span>>,
     pub globs: HashMap<Span, Glob>,
     pub impls: HashMap<Id, Vec<Span>>,
@@ -123,6 +127,8 @@ pub struct Glob {
 
 impl PerCrateAnalysis {
     pub fn new(timestamp: SystemTime, path: Option<PathBuf>) -> PerCrateAnalysis {
+        let empty_fst =
+            fst::Map::from_iter(iter::empty::<(String, u64)>()).unwrap();
         PerCrateAnalysis {
             def_id_for_span: HashMap::new(),
             defs: HashMap::new(),
@@ -130,6 +136,8 @@ impl PerCrateAnalysis {
             children: HashMap::new(),
             def_names: HashMap::new(),
             def_trie: Trie::new(),
+            def_fst: empty_fst,
+            def_fst_values: Vec::new(),
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
             impls: HashMap::new(),
@@ -281,7 +289,7 @@ impl Analysis {
 
         self.for_all_crates(|c| {
             c.def_trie.get_raw_descendant(&lowered_stem).map(|s| {
-                s.values().flat_map(|ids| 
+                s.values().flat_map(|ids|
                     ids.iter().flat_map(|id| c.defs.get(id)).cloned()
                 ).collect()
             })
