@@ -15,7 +15,6 @@ extern crate log;
 extern crate rls_data as data;
 extern crate rls_span as span;
 extern crate rustc_serialize;
-extern crate radix_trie;
 extern crate fst;
 extern crate itertools;
 
@@ -25,6 +24,7 @@ mod loader;
 mod lowering;
 mod listings;
 mod util;
+mod fstq;
 #[cfg(test)]
 mod test;
 

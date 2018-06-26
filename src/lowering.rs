@@ -261,7 +261,6 @@ impl CrateReader {
                 // that's fine, but no need to index in def_trie
                 if d.name != "" {
                     defs_to_index.push((d.name.to_lowercase(), id));
-                    analysis.def_trie.map_with_default(d.name.to_lowercase(), |v| v.push(id), vec![id]);
                 }
 
                 let parent = d.parent.map(|id| self.id_from_compiler_id(&id));

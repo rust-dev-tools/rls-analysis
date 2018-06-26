@@ -10,11 +10,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::iter;
-use radix_trie::{Trie, TrieCommon};
-use fst;
+use fst::{self, IntoStreamer};
 
 use {Id, Span};
 use raw::{CrateId, DefKind};
+use fstq;
 
 /// This is the main database that contains all the collected symbol information,
 /// such as definitions, their mapping between spans, hierarchy and so on,
@@ -46,7 +46,7 @@ pub struct PerCrateAnalysis {
     pub defs_per_file: HashMap<PathBuf, Vec<Id>>,
     pub children: HashMap<Id, HashSet<Id>>,
     pub def_names: HashMap<String, Vec<Id>>,
-    pub def_trie: Trie<String, Vec<Id>>,
+    // pub def_trie: Trie<String, Vec<Id>>,
     pub def_fst: fst::Map,
     pub def_fst_values: Vec<Vec<Id>>,
     pub ref_spans: HashMap<Id, Vec<Span>>,
@@ -135,7 +135,6 @@ impl PerCrateAnalysis {
             defs_per_file: HashMap::new(),
             children: HashMap::new(),
             def_names: HashMap::new(),
-            def_trie: Trie::new(),
             def_fst: empty_fst,
             def_fst_values: Vec::new(),
             ref_spans: HashMap::new(),
@@ -288,11 +287,15 @@ impl Analysis {
         let lowered_stem = stem.to_lowercase();
 
         self.for_all_crates(|c| {
-            c.def_trie.get_raw_descendant(&lowered_stem).map(|s| {
-                s.values().flat_map(|ids|
-                    ids.iter().flat_map(|id| c.defs.get(id)).cloned()
-                ).collect()
-            })
+            let defs = c.def_fst.search(fstq::prefix(&lowered_stem))
+                .into_stream()
+                .into_values()
+                .into_iter()
+                .flat_map(|idx| {
+                    let idx = idx as usize;
+                    c.def_fst_values[idx].iter().flat_map(|id| c.defs.get(id)).cloned()
+                }).collect();
+            Some(defs)
         })
     }
 
