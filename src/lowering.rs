@@ -25,6 +25,9 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::u32;
 
+use fst;
+use itertools::Itertools;
+
 // f is a function used to record the lowered crate into analysis.
 pub fn lower<F, L>(
     raw_analysis: Vec<raw::Crate>,
@@ -224,6 +227,7 @@ impl CrateReader {
     }
 
     fn read_defs(&self, defs: Vec<raw::Def>, analysis: &mut PerCrateAnalysis, distro_crate: bool) {
+        let mut defs_to_index = Vec::new();
         for d in defs {
             let span = lower_span(&d.span, &self.base_dir, &self.path_rewrite);
             let id = self.id_from_compiler_id(&d.id);
@@ -256,9 +260,9 @@ impl CrateReader {
                 // NOTE not every Def will have a name, e.g. test_data/hello/src/main is analyzed with an implicit module
                 // that's fine, but no need to index in def_trie
                 if d.name != "" {
-                    analysis.def_trie.map_with_default(d.name.to_lowercase(), |v| v.push(id), vec![id]);
+                    defs_to_index.push((d.name.to_lowercase(), id));
                 }
-                
+
                 let parent = d.parent.map(|id| self.id_from_compiler_id(&id));
                 if let Some(parent) = parent {
                     let children = analysis
@@ -300,6 +304,10 @@ impl CrateReader {
                 analysis.defs.insert(id, def);
             }
         }
+
+        let (def_fst, def_fst_values) = build_index(defs_to_index);
+        analysis.def_fst = def_fst;
+        analysis.def_fst_values = def_fst_values;
 
         // We must now run a pass over the defs setting parents, because
         // save-analysis often omits parent info.
@@ -407,4 +415,19 @@ fn abs_ref_id<L: AnalysisLoader>(
 
     // TODO
     None
+}
+
+fn build_index(mut defs: Vec<(String, Id)>) -> (fst::Map, Vec<Vec<Id>>) {
+    defs.sort_by(|(n1, _), (n2, _)| n1.cmp(n2));
+    let by_name = defs.into_iter().group_by(|(n, _)| n.clone());
+
+    let mut values: Vec<Vec<Id>> = Vec::new();
+    let fst = {
+        let defs = by_name.into_iter().enumerate().map(|(i, (name, defs))| {
+            values.push(defs.map(|(_, id)| id).collect());
+            (name, i as u64)
+        });
+        fst::Map::from_iter(defs).expect("defs are sorted by lowercase name")
+    };
+    (fst, values)
 }

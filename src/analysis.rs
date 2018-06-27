@@ -9,16 +9,17 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use radix_trie::{Trie, TrieCommon};
+use std::iter;
+use fst;
 
-use {Id, Span};
+use {Id, Span, SymbolQuery};
 use raw::{CrateId, DefKind};
 
 /// This is the main database that contains all the collected symbol information,
 /// such as definitions, their mapping between spans, hierarchy and so on,
 /// organized in a per-crate fashion.
 #[derive(Debug)]
-pub struct Analysis {
+pub(crate) struct Analysis {
     /// Contains lowered data with global inter-crate `Id`s per each crate.
     pub per_crate: HashMap<CrateId, PerCrateAnalysis>,
 
@@ -44,7 +45,12 @@ pub struct PerCrateAnalysis {
     pub defs_per_file: HashMap<PathBuf, Vec<Id>>,
     pub children: HashMap<Id, HashSet<Id>>,
     pub def_names: HashMap<String, Vec<Id>>,
-    pub def_trie: Trie<String, Vec<Id>>,
+
+    // Index of all symbols that powers the search.
+    // See `SymbolQuery`.
+    pub def_fst: fst::Map,
+    pub def_fst_values: Vec<Vec<Id>>,
+
     pub ref_spans: HashMap<Id, Vec<Span>>,
     pub globs: HashMap<Span, Glob>,
     pub impls: HashMap<Id, Vec<Span>>,
@@ -123,13 +129,16 @@ pub struct Glob {
 
 impl PerCrateAnalysis {
     pub fn new(timestamp: SystemTime, path: Option<PathBuf>) -> PerCrateAnalysis {
+        let empty_fst =
+            fst::Map::from_iter(iter::empty::<(String, u64)>()).unwrap();
         PerCrateAnalysis {
             def_id_for_span: HashMap::new(),
             defs: HashMap::new(),
             defs_per_file: HashMap::new(),
             children: HashMap::new(),
             def_names: HashMap::new(),
-            def_trie: Trie::new(),
+            def_fst: empty_fst,
+            def_fst_values: Vec::new(),
             ref_spans: HashMap::new(),
             globs: HashMap::new(),
             impls: HashMap::new(),
@@ -276,15 +285,21 @@ impl Analysis {
         self.for_each_crate(|c| c.defs_per_file.get(file).map(&f))
     }
 
-    pub fn matching_defs(&self, stem: &str) -> Vec<Def> {
-        let lowered_stem = stem.to_lowercase();
-
-        self.for_all_crates(|c| {
-            c.def_trie.get_raw_descendant(&lowered_stem).map(|s| {
-                s.values().flat_map(|ids| 
-                    ids.iter().flat_map(|id| c.defs.get(id)).cloned()
-                ).collect()
+    pub fn query_defs(&self, query: SymbolQuery) -> Vec<Def> {
+        let mut crates = Vec::with_capacity(self.per_crate.len());
+        let stream = query.build_stream(
+            self.per_crate.values().map(|c| {
+                crates.push(c);
+                &c.def_fst
             })
+        );
+
+        query.search_stream(stream, |acc, e| {
+            let c = &crates[e.index];
+            let ids = &c.def_fst_values[e.value as usize];
+            acc.extend(
+                ids.iter().flat_map(|id| c.defs.get(id)).cloned()
+            );
         })
     }
 
