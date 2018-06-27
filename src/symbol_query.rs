@@ -30,20 +30,20 @@ impl SymbolQuery {
         }
     }
 
-    pub fn subsequence<S: Into<String>>(query_string: S) -> SymbolQuery {
-        SymbolQuery::new(query_string.into().to_lowercase(), Mode::Subsequence)
+    pub fn subsequence(query_string: &str) -> SymbolQuery {
+        SymbolQuery::new(query_string.to_lowercase(), Mode::Subsequence)
     }
 
-    pub fn prefix<S: Into<String>>(query_string: S) -> SymbolQuery {
-        SymbolQuery::new(query_string.into().to_lowercase(), Mode::Prefix)
+    pub fn prefix(query_string: &str) -> SymbolQuery {
+        SymbolQuery::new(query_string.to_lowercase(), Mode::Prefix)
     }
 
     pub fn limit(self, limit: usize) -> SymbolQuery {
         SymbolQuery { limit, ..self }
     }
 
-    pub fn greater_than<S: Into<String>>(self, greater_than: S) -> SymbolQuery {
-        SymbolQuery { greater_than: greater_than.into().to_lowercase(), ..self }
+    pub fn greater_than(self, greater_than: &str) -> SymbolQuery {
+        SymbolQuery { greater_than: greater_than.to_lowercase(), ..self }
     }
 
     pub(crate) fn build_stream<'a, I>(&'a self, fsts: I) -> fst::map::Union<'a>
@@ -75,7 +75,6 @@ impl SymbolQuery {
         }
         res
     }
-
 }
 
 /// See http://docs.rs/fst for how we implement query processing.
