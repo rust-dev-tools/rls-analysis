@@ -24,7 +24,7 @@ mod loader;
 mod lowering;
 mod listings;
 mod util;
-mod fstq;
+mod symbol_query;
 #[cfg(test)]
 mod test;
 
@@ -32,6 +32,7 @@ pub use analysis::{Def, Ref};
 use analysis::Analysis;
 pub use raw::{name_space_for_def_kind, read_analysis_from_files, CrateId, DefKind};
 pub use loader::{AnalysisLoader, CargoAnalysisLoader, Target};
+pub use symbol_query::SymbolQuery;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -361,16 +362,20 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
 
     /// Finds Defs with names that starting with (ignoring case) `stem`
     pub fn matching_defs(&self, stem: &str) -> AResult<Vec<Def>> {
+        self.query_defs(SymbolQuery::prefix(stem))
+    }
+
+    pub fn query_defs(&self, query: SymbolQuery) -> AResult<Vec<Def>> {
         let t_start = Instant::now();
-        let result = self.with_analysis(|a| {
-            let defs = a.matching_defs(stem);
-            info!("matching_defs {:?}", &defs);
+        let result = self.with_analysis(move |a| {
+            let defs = a.query_defs(query);
+            info!("query_defs {:?}", &defs);
             Some(defs)
         });
 
         let time = t_start.elapsed();
         info!(
-            "matching_defs: {}",
+            "query_defs: {}",
             time.as_secs() as f64 + time.subsec_nanos() as f64 / 1_000_000_000.0
         );
 
