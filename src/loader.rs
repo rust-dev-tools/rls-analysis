@@ -80,12 +80,19 @@ impl AnalysisLoader for CargoAnalysisLoader {
         let path_prefix = self.path_prefix.as_ref().unwrap();
         let target = self.target.to_string();
 
-        let deps_path = path_prefix
+        let rls_deps_path = path_prefix
             .join("target")
             .join("rls")
             .join(&target)
             .join("deps")
             .join("save-analysis");
+
+        let rls_deps_path = path_prefix
+            .join("target")
+            .join(&target)
+            .join("deps")
+            .join("save-analysis");
+
         // FIXME sys_root_path allows to break out of 'sandbox' - is that Ok?
         let sys_root_path = sys_root_path();
         let target_triple = extract_target_triple(sys_root_path.as_path());
@@ -104,6 +111,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
 
         vec![
             SearchDirectory::new(libs_path, Some(src_path)),
+            SearchDirectory::new(rls_deps_path, None),
             SearchDirectory::new(deps_path, None),
         ]
     }
