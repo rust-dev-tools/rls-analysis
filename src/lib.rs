@@ -17,6 +17,7 @@ extern crate rls_span as span;
 extern crate rustc_serialize;
 extern crate fst;
 extern crate itertools;
+extern crate json;
 
 mod analysis;
 mod raw;
