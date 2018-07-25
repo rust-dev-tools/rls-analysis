@@ -31,7 +31,7 @@ mod test;
 pub use analysis::{Def, Ref};
 use analysis::Analysis;
 pub use raw::{name_space_for_def_kind, read_analysis_from_files, CrateId, DefKind};
-pub use loader::{AnalysisLoader, CargoAnalysisLoader, Target};
+pub use loader::{AnalysisLoader, CargoAnalysisLoader, SearchDirectory, Target};
 pub use symbol_query::SymbolQuery;
 
 use std::collections::HashMap;
