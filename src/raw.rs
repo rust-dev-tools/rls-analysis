@@ -7,10 +7,12 @@
 // except according to those terms.
 
 use {AnalysisLoader, Blacklist};
+use json;
 use listings::{DirectoryListing, ListingKind};
 pub use data::{CratePreludeData, Def, DefKind, GlobalCrateId as CrateId, Import,
                Ref, Relation, RelationKind, SigElement, Signature, SpanData};
 use data::Analysis;
+use data::config::Config;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -104,11 +106,26 @@ fn read_crate_data(path: &Path) -> Option<Analysis> {
     let t = Instant::now();
 
     let buf = read_file_contents(path).or_else(|err| {
-        info!("couldn't read file: {}", err);
+        warn!("couldn't read file: {}", err);
         Err(err)
     }).ok()?;
     let s = ::rustc_serialize::json::decode(&buf).or_else(|err| {
-        info!("deserialisation error: {:?}", err);
+        warn!("deserialisation error: {:?}", err);
+        json::parse(&buf).map(|parsed| {
+            if let json::JsonValue::Object(obj) = parsed {
+                let expected = Some(json::JsonValue::from(Analysis::new(Config::default()).version));
+                let actual = obj.get("version").map(|v| v.clone());
+                if expected != actual {
+                    warn!("Data file version mismatch; expected {:?} but got {:?}",
+                          expected, actual);
+                }
+            } else {
+                warn!("Data file didn't have a JSON object at the root");
+            }
+        }).map_err(|err| {
+            warn!("Data file was not valid JSON: {:?}", err);
+        }).ok();
+
         Err(err)
     }).ok()?;
 

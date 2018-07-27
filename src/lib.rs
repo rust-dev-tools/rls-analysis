@@ -17,6 +17,7 @@ extern crate rls_span as span;
 extern crate rustc_serialize;
 extern crate fst;
 extern crate itertools;
+extern crate json;
 
 mod analysis;
 mod raw;
@@ -31,7 +32,7 @@ mod test;
 pub use analysis::{Def, Ref};
 use analysis::Analysis;
 pub use raw::{name_space_for_def_kind, read_analysis_from_files, CrateId, DefKind};
-pub use loader::{AnalysisLoader, CargoAnalysisLoader, Target};
+pub use loader::{AnalysisLoader, CargoAnalysisLoader, SearchDirectory, Target};
 pub use symbol_query::SymbolQuery;
 
 use std::collections::HashMap;
