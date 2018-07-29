@@ -148,6 +148,8 @@ pub fn name_space_for_def_kind(dk: DefKind) -> char {
         DefKind::Type |
         DefKind::ExternType |
         DefKind::Trait => 't',
+        DefKind::ForeignFunction |
+        DefKind::ForeignStatic |
         DefKind::Function |
         DefKind::Method |
         DefKind::Mod |
