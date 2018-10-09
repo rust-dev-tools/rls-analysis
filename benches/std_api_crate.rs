@@ -19,7 +19,7 @@ use test::Bencher;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
-use rls_analysis::{AnalysisHost, AnalysisLoader};
+use rls_analysis::{AnalysisHost, AnalysisLoader, SearchDirectory};
 
 #[derive(Clone, new)]
 struct TestAnalysisLoader {
@@ -41,7 +41,9 @@ impl AnalysisLoader for TestAnalysisLoader {
         panic!();
     }
 
-    fn search_directories(&self) -> Vec<PathBuf> { vec![self.path.clone()] }
+    fn search_directories(&self) -> Vec<SearchDirectory> {
+        vec![SearchDirectory::new(self.path.clone(), None)]
+    }
 }
 
 lazy_static! {
