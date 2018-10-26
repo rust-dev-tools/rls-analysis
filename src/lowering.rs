@@ -239,7 +239,15 @@ impl CrateReader {
                     .or_insert_with(|| vec![])
                     .push(id);
                 let decl_id = match d.decl_id {
-                    Some(ref decl_id) => Ref::Double(self.id_from_compiler_id(decl_id), id),
+                    Some(ref decl_id) => {
+                        let def_id = self.id_from_compiler_id(decl_id);
+                        analysis
+                            .ref_spans
+                            .entry(def_id)
+                            .or_insert_with(|| vec![])
+                            .push(span.clone());
+                        Ref::Id(def_id)
+                    }
                     None => Ref::Id(id),
                 };
                 match analysis.def_id_for_span.entry(span.clone()) {
