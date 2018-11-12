@@ -229,6 +229,9 @@ impl CrateReader {
     fn read_defs(&self, defs: Vec<raw::Def>, analysis: &mut PerCrateAnalysis, distro_crate: bool) {
         let mut defs_to_index = Vec::new();
         for d in defs {
+            if d.span.file_name.to_str().map(|s| s.ends_with('>')).unwrap_or(true) {
+                continue;
+            }
             let span = lower_span(&d.span, &self.base_dir, &self.path_rewrite);
             let id = self.id_from_compiler_id(&d.id);
             if id != NULL && !analysis.defs.contains_key(&id) {
@@ -336,6 +339,9 @@ impl CrateReader {
         project_analysis: &AnalysisHost<L>,
     ) {
         for r in refs {
+            if r.span.file_name.to_str().map(|s| s.ends_with('>')).unwrap_or(true) {
+                continue;
+            }
             let def_id = self.id_from_compiler_id(&r.ref_id);
             let span = lower_span(&r.span, &self.base_dir, &self.path_rewrite);
             self.record_ref(def_id, span, analysis, project_analysis);
