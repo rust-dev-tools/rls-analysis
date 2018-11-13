@@ -19,7 +19,7 @@ use raw::{CrateId, DefKind};
 /// such as definitions, their mapping between spans, hierarchy and so on,
 /// organized in a per-crate fashion.
 #[derive(Debug)]
-pub(crate) struct Analysis {
+crate struct Analysis {
     /// Contains lowered data with global inter-crate `Id`s per each crate.
     pub per_crate: HashMap<CrateId, PerCrateAnalysis>,
 
@@ -30,7 +30,10 @@ pub(crate) struct Analysis {
     //
     // In the future we should handle imports, in particular aliasing ones, more
     // explicitly and then this can be removed.
-    pub(crate) aliased_imports: HashSet<Id>,
+    crate aliased_imports: HashSet<Id>,
+
+    // Maps a crate names to the crate ids for all crates with that name.
+    crate crate_names: HashMap<String, Vec<CrateId>>,
 
     pub doc_url_base: String,
     pub src_url_base: String,
@@ -58,6 +61,10 @@ pub struct PerCrateAnalysis {
     pub root_id: Option<Id>,
     pub timestamp: SystemTime,
     pub path: Option<PathBuf>,
+    // All definitions in this crate will include the global_crate_num. See
+    // lowering::id_from_compiler_id for details of how.
+    // global_crate_num is not available until after lowering.
+    pub global_crate_num: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -145,6 +152,17 @@ impl PerCrateAnalysis {
             root_id: None,
             timestamp,
             path,
+            global_crate_num: 0,
+        }
+    }
+
+    // Returns true if there is a def in this crate with the same crate-local id
+    // and span as `def`.
+    crate fn has_congruent_def(&self, local_id: u32, span: &Span) -> bool {
+        let id = Id::from_crate_and_local(self.global_crate_num, local_id);
+        match self.defs.get(&id) {
+            Some(existing) => span == &existing.span,
+            None => false,
         }
     }
 }
@@ -154,6 +172,7 @@ impl Analysis {
         Analysis {
             per_crate: HashMap::new(),
             aliased_imports: HashSet::new(),
+            crate_names: HashMap::new(),
             // TODO don't hardcode these
             doc_url_base: "https://doc.rust-lang.org/nightly".to_owned(),
             src_url_base: "https://github.com/rust-lang/rust/blob/master".to_owned(),
@@ -180,13 +199,22 @@ impl Analysis {
     where
         F: Fn(&PerCrateAnalysis) -> Option<T>,
     {
+        let mut result = vec![];
         for per_crate in self.per_crate.values() {
             if let Some(t) = f(per_crate) {
-                return Some(t);
+                result.push(t);
             }
         }
 
-        None
+        // This isn't a problem per se, but it can make tests non-deterministic, so should
+        // be avoided.
+        debug_assert!(
+            result.len() <= 1,
+            "error in for_each_crate, found {} results, expected 0 or 1",
+            result.len(),
+        );
+        let temp = result.drain(..).next();
+        temp // stupid NLL bug
     }
 
     pub fn for_all_crates<F, T>(&self, f: F) -> Vec<T>

@@ -7,6 +7,7 @@
 // except according to those terms.
 
 #![feature(type_ascription)]
+#![feature(crate_visibility_modifier)]
 
 #[macro_use]
 extern crate derive_new;
@@ -84,6 +85,14 @@ pub type Span = span::Span<span::ZeroIndexed>;
 /// crate-local number).
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, new)]
 pub struct Id(u64);
+
+impl Id {
+    fn from_crate_and_local(crate_id: u32, local_id: u32) -> Id {
+        // Use global crate number for high order bits,
+        // then index for least significant bits.
+        Id(((crate_id as u64) << 32) | (local_id as u64))
+    }
+}
 
 /// Used to indicate a missing index in the Id.
 pub const NULL: Id = Id(u64::MAX);
@@ -319,6 +328,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                 } else {
                     None
                 };
+                eprintln!("  decl: {:?}", decl);
                 let refs = a.with_ref_spans(id, |refs| {
                     if force_unique_spans {
                         for r in refs.iter() {

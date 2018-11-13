@@ -11,7 +11,7 @@
 
 use analysis::{Def, Glob, PerCrateAnalysis, Ref};
 use data;
-use raw::{self, RelationKind, CrateId};
+use raw::{self, RelationKind, CrateId, DefKind};
 use {AResult, AnalysisHost, Id, Span, NULL};
 use loader::AnalysisLoader;
 use util;
@@ -107,6 +107,7 @@ struct CrateReader {
     base_dir: PathBuf,
     crate_name: String,
     path_rewrite: Option<PathBuf>,
+    crate_homonyms: Vec<CrateId>,
 }
 
 impl CrateReader {
@@ -128,7 +129,7 @@ impl CrateReader {
         // It's worth noting, that we assume that local crate id is 0, whereas
         // the external crates will have num in 1..count contiguous range.
         let crate_id = prelude.crate_id;
-        trace!("building crate map for {}", crate_id.name);
+        trace!("building crate map for {:?}", crate_id);
         let index = fetch_crate_index(master_crate_map, crate_id.clone());
         let mut crate_map = vec![index];
         trace!("  {} -> {}", crate_id.name, master_crate_map[&crate_id]);
@@ -144,6 +145,7 @@ impl CrateReader {
         CrateReader {
             crate_map,
             base_dir: base_dir.to_owned(),
+            crate_homonyms: master_crate_map.keys().filter(|cid| cid.name == crate_id.name).cloned().collect(),
             crate_name: crate_id.name,
             path_rewrite,
         }
@@ -165,10 +167,21 @@ impl CrateReader {
         let mut per_crate = PerCrateAnalysis::new(krate.timestamp, krate.path);
 
         let is_distro_crate = krate.analysis.config.distro_crate;
-        reader.read_defs(krate.analysis.defs, &mut per_crate, is_distro_crate);
+        reader.read_defs(krate.analysis.defs, &mut per_crate, is_distro_crate, project_analysis);
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
         reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
+        per_crate.global_crate_num = reader.crate_map[0];
+
+        {
+            let analysis = &mut project_analysis.analysis.lock().unwrap();
+            analysis.as_mut()
+                .unwrap()
+                .crate_names
+                .entry(krate.id.name.clone())
+                .or_insert_with(|| vec![])
+                .push(krate.id.clone());
+        }
 
         (per_crate, krate.id)
     }
@@ -226,13 +239,52 @@ impl CrateReader {
         }
     }
 
-    fn read_defs(&self, defs: Vec<raw::Def>, analysis: &mut PerCrateAnalysis, distro_crate: bool) {
+    // We are sometimes asked to analyze the same crate twice. This can happen due to duplicate data,
+    // but more frequently is due to compiling it twice with different Cargo targets (e.g., bin and test).
+    // In that case there will be two crates with the same names, but different disambiguators. We
+    // want to ensure that we only record defs once, even if the defintion is in multiple crates.
+    // So we compare the crate-local id and span and skip any subsequent defs which match already
+    // present defs.
+    fn has_congruent_def<L: AnalysisLoader>(&self, local_id: u32, span: &Span, project_analysis: &AnalysisHost<L>) -> bool {
+        if self.crate_homonyms.is_empty() {
+            return false;
+        }
+
+        let project_analysis = project_analysis.analysis.lock().unwrap();
+        let project_analysis = project_analysis.as_ref().unwrap();
+
+        for ch in &self.crate_homonyms {
+            let per_crate = match project_analysis.per_crate.get(ch) {
+                Some(per_crate) => per_crate,
+                None => continue,
+            };
+
+            if per_crate.has_congruent_def(local_id, span) {
+                eprintln!("congruent def");
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn read_defs<L: AnalysisLoader>(
+        &self,
+        defs: Vec<raw::Def>,
+        analysis: &mut PerCrateAnalysis,
+        distro_crate: bool,
+        project_analysis: &AnalysisHost<L>,
+    ) {
         let mut defs_to_index = Vec::new();
         for d in defs {
-            if d.span.file_name.to_str().map(|s| s.ends_with('>')).unwrap_or(true) {
+            if bad_span(&d.span, d.kind == DefKind::Mod) {
                 continue;
             }
             let span = lower_span(&d.span, &self.base_dir, &self.path_rewrite);
+            if self.has_congruent_def(d.id.index, &span, project_analysis) {
+                continue;
+            }
+
             let id = self.id_from_compiler_id(&d.id);
             if id != NULL && !analysis.defs.contains_key(&id) {
                 let file_name = span.file.clone();
@@ -411,10 +463,8 @@ impl CrateReader {
             return NULL;
         }
 
-        let krate = self.crate_map[id.krate as usize] as u64;
-        // Use global crate number for high order bits,
-        // then index for least significant bits.
-        Id((krate << 32) | (id.index as u64))
+        let krate = self.crate_map[id.krate as usize];
+        Id::from_crate_and_local(krate, id.index)
     }
 }
 
@@ -444,4 +494,17 @@ fn build_index(mut defs: Vec<(String, Id)>) -> (fst::Map, Vec<Vec<Id>>) {
         fst::Map::from_iter(defs).expect("defs are sorted by lowercase name")
     };
     (fst, values)
+}
+
+fn bad_span(span: &raw::SpanData, is_mod: bool) -> bool {
+    let b = span.file_name.to_str().map(|s| s.ends_with('>')).unwrap_or(true) ||
+        (!is_mod &&
+         span.byte_start == 0 &&
+         span.byte_end == 0);
+
+    if b {
+        eprintln!("bad span: {:?}", span);
+    }
+
+    b
 }
