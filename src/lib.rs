@@ -328,7 +328,6 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                 } else {
                     None
                 };
-                eprintln!("  decl: {:?}", decl);
                 let refs = a.with_ref_spans(id, |refs| {
                     if force_unique_spans {
                         for r in refs.iter() {

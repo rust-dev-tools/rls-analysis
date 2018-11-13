@@ -260,7 +260,6 @@ impl CrateReader {
             };
 
             if per_crate.has_congruent_def(local_id, span) {
-                eprintln!("congruent def");
                 return true;
             }
         }
@@ -497,14 +496,8 @@ fn build_index(mut defs: Vec<(String, Id)>) -> (fst::Map, Vec<Vec<Id>>) {
 }
 
 fn bad_span(span: &raw::SpanData, is_mod: bool) -> bool {
-    let b = span.file_name.to_str().map(|s| s.ends_with('>')).unwrap_or(true) ||
+    span.file_name.to_str().map(|s| s.ends_with('>')).unwrap_or(true) ||
         (!is_mod &&
          span.byte_start == 0 &&
-         span.byte_end == 0);
-
-    if b {
-        eprintln!("bad span: {:?}", span);
-    }
-
-    b
+         span.byte_end == 0)
 }
