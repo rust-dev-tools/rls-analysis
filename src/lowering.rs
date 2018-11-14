@@ -196,7 +196,7 @@ impl CrateReader {
             let span = lower_span(&i.span, &self.base_dir, &self.path_rewrite);
             if !i.value.is_empty() {
                 // A glob import.
-                if !self.has_congruent_glob(&span, &i.value, project_analysis) {
+                if !self.has_congruent_glob(&span, project_analysis) {
                     let glob = Glob { value: i.value };
                     trace!("record glob {:?} {:?}", span, glob);
                     analysis.globs.insert(span, glob);
@@ -251,15 +251,8 @@ impl CrateReader {
         self.has_congruent_item(project_analysis, |per_crate| per_crate.has_congruent_def(local_id, span))
     }
 
-    fn has_congruent_glob<L: AnalysisLoader>(&self, span: &Span, value: &str, project_analysis: &AnalysisHost<L>) -> bool {
-        self.has_congruent_item(project_analysis, |per_crate| {
-            if let Some(g) = per_crate.globs.get(span) {
-                debug_assert_eq!(value, &g.value);
-                true
-            } else {
-                false
-            }
-        })
+    fn has_congruent_glob<L: AnalysisLoader>(&self, span: &Span, project_analysis: &AnalysisHost<L>) -> bool {
+        self.has_congruent_item(project_analysis, |per_crate| per_crate.globs.contains_key(span))
     }
 
     fn has_congruent_item<L, P>(&self, project_analysis: &AnalysisHost<L>, pred: P) -> bool
