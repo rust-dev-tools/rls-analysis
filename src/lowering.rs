@@ -196,9 +196,11 @@ impl CrateReader {
             let span = lower_span(&i.span, &self.base_dir, &self.path_rewrite);
             if !i.value.is_empty() {
                 // A glob import.
-                let glob = Glob { value: i.value };
-                trace!("record glob {:?} {:?}", span, glob);
-                analysis.globs.insert(span, glob);
+                if !self.has_congruent_glob(&span, &i.value, project_analysis) {
+                    let glob = Glob { value: i.value };
+                    trace!("record glob {:?} {:?}", span, glob);
+                    analysis.globs.insert(span, glob);
+                }
             } else if let Some(ref ref_id) = i.ref_id {
                 // Import where we know the referred def.
                 let def_id = self.id_from_compiler_id(ref_id);
@@ -246,6 +248,25 @@ impl CrateReader {
     // So we compare the crate-local id and span and skip any subsequent defs which match already
     // present defs.
     fn has_congruent_def<L: AnalysisLoader>(&self, local_id: u32, span: &Span, project_analysis: &AnalysisHost<L>) -> bool {
+        self.has_congruent_item(project_analysis, |per_crate| per_crate.has_congruent_def(local_id, span))
+    }
+
+    fn has_congruent_glob<L: AnalysisLoader>(&self, span: &Span, value: &str, project_analysis: &AnalysisHost<L>) -> bool {
+        self.has_congruent_item(project_analysis, |per_crate| {
+            if let Some(g) = per_crate.globs.get(span) {
+                debug_assert!(value == &g.value);
+                true
+            } else {
+                false
+            }
+        })
+    }
+
+    fn has_congruent_item<L, P>(&self, project_analysis: &AnalysisHost<L>, pred: P) -> bool
+        where
+            L: AnalysisLoader,
+            P: Fn(&PerCrateAnalysis) -> bool,
+    {
         if self.crate_homonyms.is_empty() {
             return false;
         }
@@ -259,7 +280,7 @@ impl CrateReader {
                 None => continue,
             };
 
-            if per_crate.has_congruent_def(local_id, span) {
+            if pred(per_crate) {
                 return true;
             }
         }
