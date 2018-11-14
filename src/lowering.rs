@@ -254,7 +254,7 @@ impl CrateReader {
     fn has_congruent_glob<L: AnalysisLoader>(&self, span: &Span, value: &str, project_analysis: &AnalysisHost<L>) -> bool {
         self.has_congruent_item(project_analysis, |per_crate| {
             if let Some(g) = per_crate.globs.get(span) {
-                debug_assert!(value == &g.value);
+                debug_assert_eq!(value, &g.value);
                 true
             } else {
                 false
