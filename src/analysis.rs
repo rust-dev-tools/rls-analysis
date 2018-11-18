@@ -237,7 +237,7 @@ impl Analysis {
     }
 
     pub fn ref_for_span(&self, span: &Span) -> Option<Ref> {
-        self.for_each_crate(|c| c.def_id_for_span.get(span).map(|r| { eprintln!("{:?}", r); r.clone()}))
+        self.for_each_crate(|c| c.def_id_for_span.get(span).map(|r| r.clone()))
     }
 
     // Like def_id_for_span, but will only return a def_id if it is in the same

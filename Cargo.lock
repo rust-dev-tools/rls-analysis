@@ -169,7 +169,7 @@ dependencies = [
 
 [[package]]
 name = "rls-analysis"
-version = "0.16.7"
+version = "0.16.8"
 dependencies = [
  "derive-new 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
