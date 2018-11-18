@@ -206,13 +206,14 @@ impl Analysis {
             }
         }
 
-        // This isn't a problem per se, but it can make tests non-deterministic, so should
-        // be avoided.
-        debug_assert!(
-            result.len() <= 1,
-            "error in for_each_crate, found {} results, expected 0 or 1",
-            result.len(),
-        );
+        // This assertion is sometimes helpful for debugging, but also can cause
+        // problems where otherwise there are none.
+        // FIXME - might be worth investigating some common causes.
+        // assert!(
+        //     result.len() <= 1,
+        //     "error in for_each_crate, found {} results, expected 0 or 1",
+        //     result.len(),
+        // );
         let temp = result.drain(..).next();
         temp // stupid NLL bug
     }
@@ -236,7 +237,7 @@ impl Analysis {
     }
 
     pub fn ref_for_span(&self, span: &Span) -> Option<Ref> {
-        self.for_each_crate(|c| c.def_id_for_span.get(span).map(|r|  r.clone()))
+        self.for_each_crate(|c| c.def_id_for_span.get(span).map(|r| { eprintln!("{:?}", r); r.clone()}))
     }
 
     // Like def_id_for_span, but will only return a def_id if it is in the same
