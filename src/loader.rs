@@ -99,8 +99,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
             .join("lib")
             .join("rustlib")
             .join("src")
-            .join("rust")
-            .join("src");
+            .join("rust");
 
         vec![
             SearchDirectory::new(libs_path, Some(src_path)),
