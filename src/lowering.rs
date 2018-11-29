@@ -300,6 +300,7 @@ impl<'a> CrateReader<'a> {
             }
             let span = lower_span(&d.span, &self.base_dir, &self.path_rewrite);
             if self.has_congruent_def(d.id.index, &span, project_analysis) {
+                trace!("read_defs: has_congruent_def({}, {:?}), skipping", d.id.index, span);
                 continue;
             }
 
