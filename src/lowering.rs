@@ -42,10 +42,15 @@ where
     let rss = util::get_resident().unwrap_or(0);
     let t_start = Instant::now();
 
+    // Keep a queue of crates that we are yet to overwrite as part of the lowering
+    // process (to know which already-existing defs we can overwrite and lower)
+    let mut invalidated_crates: Vec<_> = raw_analysis.iter().map(|c| c.id.clone()).collect();
+
     for c in raw_analysis {
         let t_start = Instant::now();
 
-        let (per_crate, id) = CrateReader::read_crate(analysis, c, base_dir);
+        let (per_crate, id) = CrateReader::read_crate(analysis, c, base_dir, &invalidated_crates);
+        invalidated_crates.retain(|elem| *elem != id);
 
         let time = t_start.elapsed();
         info!(
@@ -100,7 +105,7 @@ fn lower_span(raw_span: &raw::SpanData, base_dir: &Path, path_rewrite: &Option<P
 /// Responsible for processing the raw `data::Analysis`, including translating
 /// from local crate ids to global crate ids, and creating lowered
 /// `PerCrateAnalysis`.
-struct CrateReader {
+struct CrateReader<'a> {
     /// This is effectively a map from local crate id -> global crate id, where
     /// local crate id are indices 0...external_crate_count.
     crate_map: Vec<u32>,
@@ -108,17 +113,23 @@ struct CrateReader {
     crate_name: String,
     path_rewrite: Option<PathBuf>,
     crate_homonyms: Vec<CrateId>,
+    /// List of crates that are invalidated (replaced) as part of the current
+    /// lowering process. These will be overriden and their definitions should
+    /// not be taken into account when checking if we need to ignore duplicated
+    /// item.
+    invalidated_crates: &'a [CrateId],
 }
 
-impl CrateReader {
+impl<'a> CrateReader<'a> {
     fn from_prelude(
         mut prelude: raw::CratePreludeData,
         master_crate_map: &mut HashMap<CrateId, u32>,
         base_dir: &Path,
         path_rewrite: Option<PathBuf>,
-    ) -> CrateReader {
+        invalidated_crates: &'a [CrateId],
+    ) -> CrateReader<'a> {
         fn fetch_crate_index(map: &mut HashMap<CrateId, u32>,
-                             id: data::GlobalCrateId) -> u32 {
+                             id: CrateId) -> u32 {
             let next = map.len() as u32;
             *map.entry(id).or_insert(next)
         }
@@ -148,6 +159,7 @@ impl CrateReader {
             crate_homonyms: master_crate_map.keys().filter(|cid| cid.name == crate_id.name).cloned().collect(),
             crate_name: crate_id.name,
             path_rewrite,
+            invalidated_crates,
         }
     }
 
@@ -156,12 +168,14 @@ impl CrateReader {
         project_analysis: &AnalysisHost<L>,
         krate: raw::Crate,
         base_dir: &Path,
+        invalidated_crates: &[CrateId],
     ) -> (PerCrateAnalysis, CrateId) {
         let reader = CrateReader::from_prelude(
             krate.analysis.prelude.unwrap(),
             &mut project_analysis.master_crate_map.lock().unwrap(),
             base_dir,
             krate.path_rewrite,
+            invalidated_crates,
         );
 
         let mut per_crate = PerCrateAnalysis::new(krate.timestamp, krate.path);
@@ -267,8 +281,16 @@ impl CrateReader {
         let project_analysis = project_analysis.analysis.lock().unwrap();
         let project_analysis = project_analysis.as_ref().unwrap();
 
-        self.crate_homonyms
+        // Don't take into account crates that we are about to replace as part
+        // of the lowering. This often happens when we reload definitions for
+        // the same crate. Naturally most of the definitions will stay the same
+        // for incremental changes but will be overwritten - don't ignore them!
+        let homonyms_to_consider = self
+            .crate_homonyms
             .iter()
+            .filter(|c| !self.invalidated_crates.contains(c));
+
+        homonyms_to_consider
             .filter_map(|ch| project_analysis.per_crate.get(ch))
             .any(pred)
     }
