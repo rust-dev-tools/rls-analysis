@@ -267,18 +267,10 @@ impl CrateReader {
         let project_analysis = project_analysis.analysis.lock().unwrap();
         let project_analysis = project_analysis.as_ref().unwrap();
 
-        for ch in &self.crate_homonyms {
-            let per_crate = match project_analysis.per_crate.get(ch) {
-                Some(per_crate) => per_crate,
-                None => continue,
-            };
-
-            if pred(per_crate) {
-                return true;
-            }
-        }
-
-        false
+        self.crate_homonyms
+            .iter()
+            .filter_map(|ch| project_analysis.per_crate.get(ch))
+            .any(pred)
     }
 
     fn read_defs<L: AnalysisLoader>(
