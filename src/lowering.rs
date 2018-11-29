@@ -9,7 +9,7 @@
 //! For processing the raw save-analysis data from rustc into the rls
 //! in-memory representation.
 
-use analysis::{Def, Glob, PerCrateAnalysis, Ref};
+use analysis::{Analysis, Def, Glob, PerCrateAnalysis, Ref};
 use data;
 use raw::{self, RelationKind, CrateId, DefKind};
 use {AResult, AnalysisHost, Id, Span, NULL};
@@ -167,30 +167,30 @@ impl CrateReader {
         let mut per_crate = PerCrateAnalysis::new(krate.timestamp, krate.path);
 
         let is_distro_crate = krate.analysis.config.distro_crate;
+
+        let mut project_analysis = project_analysis.analysis.lock().unwrap();
+        let project_analysis = project_analysis.as_mut().unwrap();
+
         reader.read_defs(krate.analysis.defs, &mut per_crate, is_distro_crate, project_analysis);
         reader.read_imports(krate.analysis.imports, &mut per_crate, project_analysis);
         reader.read_refs(krate.analysis.refs, &mut per_crate, project_analysis);
         reader.read_impls(krate.analysis.relations, &mut per_crate, project_analysis);
         per_crate.global_crate_num = reader.crate_map[0];
 
-        {
-            let analysis = &mut project_analysis.analysis.lock().unwrap();
-            analysis.as_mut()
-                .unwrap()
-                .crate_names
-                .entry(krate.id.name.clone())
-                .or_insert_with(|| vec![])
-                .push(krate.id.clone());
-        }
+        project_analysis
+            .crate_names
+            .entry(krate.id.name.clone())
+            .or_insert_with(|| vec![])
+            .push(krate.id.clone());
 
         (per_crate, krate.id)
     }
 
-    fn read_imports<L: AnalysisLoader>(
+    fn read_imports(
         &self,
         imports: Vec<raw::Import>,
         analysis: &mut PerCrateAnalysis,
-        project_analysis: &AnalysisHost<L>,
+        project_analysis: &mut Analysis,
     ) {
         for i in imports {
             let span = lower_span(&i.span, &self.base_dir, &self.path_rewrite);
@@ -208,19 +208,18 @@ impl CrateReader {
                 if let Some(alias_span) = i.alias_span {
                     let alias_span = lower_span(&alias_span, &self.base_dir, &self.path_rewrite);
                     self.record_ref(def_id, alias_span, analysis, project_analysis);
-                    let mut analysis = project_analysis.analysis.lock().unwrap();
-                    analysis.as_mut().unwrap().aliased_imports.insert(def_id);
+                    project_analysis.aliased_imports.insert(def_id);
                 }
             }
         }
     }
 
-    fn record_ref<L: AnalysisLoader>(
+    fn record_ref(
         &self,
         def_id: Id,
         span: Span,
         analysis: &mut PerCrateAnalysis,
-        project_analysis: &AnalysisHost<L>,
+        project_analysis: &Analysis,
     ) {
         if def_id != NULL && (project_analysis.has_def(def_id) || analysis.defs.contains_key(&def_id)) {
             trace!("record_ref {:?} {}", span, def_id);
@@ -247,38 +246,30 @@ impl CrateReader {
     // want to ensure that we only record defs once, even if the defintion is in multiple crates.
     // So we compare the crate-local id and span and skip any subsequent defs which match already
     // present defs.
-    fn has_congruent_def<L: AnalysisLoader>(&self, local_id: u32, span: &Span, project_analysis: &AnalysisHost<L>) -> bool {
+    fn has_congruent_def(&self, local_id: u32, span: &Span, project_analysis: &Analysis) -> bool {
         self.has_congruent_item(project_analysis, |per_crate| per_crate.has_congruent_def(local_id, span))
     }
 
-    fn has_congruent_glob<L: AnalysisLoader>(&self, span: &Span, project_analysis: &AnalysisHost<L>) -> bool {
+    fn has_congruent_glob(&self, span: &Span, project_analysis: &Analysis) -> bool {
         self.has_congruent_item(project_analysis, |per_crate| per_crate.globs.contains_key(span))
     }
 
-    fn has_congruent_item<L, P>(&self, project_analysis: &AnalysisHost<L>, pred: P) -> bool
+    fn has_congruent_item<P>(&self, project_analysis: &Analysis, pred: P) -> bool
         where
-            L: AnalysisLoader,
             P: Fn(&PerCrateAnalysis) -> bool,
     {
-        if self.crate_homonyms.is_empty() {
-            return false;
-        }
-
-        let project_analysis = project_analysis.analysis.lock().unwrap();
-        let project_analysis = project_analysis.as_ref().unwrap();
-
         self.crate_homonyms
             .iter()
             .filter_map(|ch| project_analysis.per_crate.get(ch))
             .any(pred)
     }
 
-    fn read_defs<L: AnalysisLoader>(
+    fn read_defs(
         &self,
         defs: Vec<raw::Def>,
         analysis: &mut PerCrateAnalysis,
         distro_crate: bool,
-        project_analysis: &AnalysisHost<L>,
+        project_analysis: &Analysis,
     ) {
         let mut defs_to_index = Vec::new();
         for d in defs {
@@ -389,11 +380,11 @@ impl CrateReader {
         }
     }
 
-    fn read_refs<L: AnalysisLoader>(
+    fn read_refs(
         &self,
         refs: Vec<raw::Ref>,
         analysis: &mut PerCrateAnalysis,
-        project_analysis: &AnalysisHost<L>,
+        project_analysis: &Analysis,
     ) {
         for r in refs {
             if r.span.file_name.to_str().map(|s| s.ends_with('>')).unwrap_or(true) {
@@ -405,11 +396,11 @@ impl CrateReader {
         }
     }
 
-    fn read_impls<L: AnalysisLoader>(
+    fn read_impls(
         &self,
         relations: Vec<raw::Relation>,
         analysis: &mut PerCrateAnalysis,
-        project_analysis: &AnalysisHost<L>,
+        project_analysis: &Analysis,
     ) {
         for r in relations {
             match r.kind {
@@ -473,10 +464,10 @@ impl CrateReader {
     }
 }
 
-fn abs_ref_id<L: AnalysisLoader>(
+fn abs_ref_id(
     id: Id,
     analysis: &PerCrateAnalysis,
-    project_analysis: &AnalysisHost<L>,
+    project_analysis: &Analysis,
 ) -> Option<Id> {
     if project_analysis.has_def(id) || analysis.defs.contains_key(&id) {
         return Some(id);
