@@ -108,9 +108,33 @@ impl AnalysisLoader for CargoAnalysisLoader {
     }
 }
 
+fn extract_target_triple(sys_root_path: &Path) -> String {
+    // First try to get the triple from the rustc version output,
+    // otherwise fall back on the rustup-style toolchain path.
+    extract_rustc_host_triple()
+        .unwrap_or_else(|| extract_rustup_target_triple(sys_root_path))
+}
+
+fn extract_rustc_host_triple() -> Option<String> {
+    let rustc = env::var("RUSTC").unwrap_or(String::from("rustc"));
+    let verbose_version = Command::new(rustc)
+        .arg("--verbose")
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|out| String::from_utf8(out.stdout).ok())?;
+
+    // Extracts the triple from a line like `host: x86_64-unknown-linux-gnu`
+    verbose_version
+        .lines()
+        .find(|line| line.starts_with("host: "))
+        .and_then(|host| host.split_whitespace().nth(1))
+        .map(String::from)
+}
+
 // FIXME: This can fail when using a custom toolchain in rustup (often linked to
 // `/$rust_repo/build/$target/stage2`)
-fn extract_target_triple(sys_root_path: &Path) -> String {
+fn extract_rustup_target_triple(sys_root_path: &Path) -> String {
     // Extracts nightly-x86_64-pc-windows-msvc from
     // $HOME/.rustup/toolchains/nightly-x86_64-pc-windows-msvc
     let toolchain = sys_root_path
@@ -169,7 +193,7 @@ mod tests {
             r#"C:\Users\user\.rustup\toolchains\nightly-x86_64-pc-windows-msvc"#,
         );
         assert_eq!(
-            extract_target_triple(path),
+            extract_rustup_target_triple(path),
             String::from("x86_64-pc-windows-msvc")
         );
     }
@@ -180,8 +204,19 @@ mod tests {
             "/home/user/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu",
         );
         assert_eq!(
-            extract_target_triple(path),
+            extract_rustup_target_triple(path),
             String::from("x86_64-unknown-linux-gnu")
         );
+    }
+
+    #[test]
+    fn target_triple() {
+        let sys_root_path = sys_root_path();
+        let target_triple = extract_target_triple(&sys_root_path);
+        let target_path = sys_root_path
+            .join("lib")
+            .join("rustlib")
+            .join(&target_triple);
+        assert!(target_path.is_dir(), "{:?} is not a directory!", target_path);
     }
 }
