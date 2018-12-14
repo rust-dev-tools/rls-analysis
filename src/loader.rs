@@ -87,6 +87,7 @@ impl AnalysisLoader for CargoAnalysisLoader {
             .join("deps")
             .join("save-analysis");
         // FIXME sys_root_path allows to break out of 'sandbox' - is that Ok?
+        // FIXME libs_path and src_path both assume the default `libdir = "lib"`.
         let sys_root_path = sys_root_path();
         let target_triple = extract_target_triple(sys_root_path.as_path());
         let libs_path = sys_root_path
@@ -111,6 +112,8 @@ impl AnalysisLoader for CargoAnalysisLoader {
 fn extract_target_triple(sys_root_path: &Path) -> String {
     // First try to get the triple from the rustc version output,
     // otherwise fall back on the rustup-style toolchain path.
+    // FIXME: Both methods assume that the target is the host triple,
+    // which isn't the case for cross-compilation (rust-lang/rls#309).
     extract_rustc_host_triple()
         .unwrap_or_else(|| extract_rustup_target_triple(sys_root_path))
 }
