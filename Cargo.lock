@@ -176,14 +176,14 @@ dependencies = [
  "json 0.11.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "rls-data 0.18.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rls-data 0.18.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rls-span 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "rls-data"
-version = "0.18.1"
+version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "rls-span 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -313,7 +313,7 @@ dependencies = [
 "checksum redox_termios 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7e891cfe48e9100a70a3b6eb652fef28920c117d366339687bd5576160db0f76"
 "checksum regex 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "37e7cbbd370869ce2e8dff25c7018702d10b21a20ef7135316f8daecd6c25b7f"
 "checksum regex-syntax 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)" = "8c2f35eedad5295fdf00a63d7d4b238135723f92b434ec06774dad15c7ab0861"
-"checksum rls-data 0.18.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3a209ce46bb52813cbe0786a7baadc0c1a3f5543ef93f179eda3b841ed72cf2e"
+"checksum rls-data 0.18.2 (registry+https://github.com/rust-lang/crates.io-index)" = "5f80b84551b32e26affaf7f12374913b5061730c0dcd185d9e8fa5a15e36e65c"
 "checksum rls-span 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "33d66f1d6c6ccd5c98029f162544131698f6ebb61d8c697681cac409dcd08805"
 "checksum rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)" = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
 "checksum syn 0.15.26 (registry+https://github.com/rust-lang/crates.io-index)" = "f92e629aa1d9c827b2bb8297046c1ccffc57c99b947a680d3ccff1f136a3bee9"
