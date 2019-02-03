@@ -530,7 +530,7 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
                         format!(
                             "{}/{}/{}/",
                             analysis.doc_url_base,
-                            parent_qualpath.trim_right_matches('/'),
+                            parent_qualpath.trim_end_matches('/'),
                             def.name,
                         )
                     }
