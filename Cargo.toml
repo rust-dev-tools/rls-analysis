@@ -23,3 +23,6 @@ json = "0.11.13"
 [dev-dependencies]
 lazy_static = "1"
 env_logger = "0.5"
+
+[features]
+rls-blacklist = []

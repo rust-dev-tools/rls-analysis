@@ -97,6 +97,10 @@ impl Id {
 /// Used to indicate a missing index in the Id.
 pub const NULL: Id = Id(u64::MAX);
 
+#[cfg(not(feature = "rls-blacklist"))]
+type Blacklist = Vec<String>;
+
+#[cfg(feature = "rls-blacklist")]
 type Blacklist<'a> = &'a [&'static str];
 
 macro_rules! clone_field {
@@ -156,6 +160,12 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
         )
     }
 
+    #[cfg(not(feature = "rls-blacklist"))]
+    pub fn reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
+        self.reload_with_blacklist(path_prefix, base_dir, vec![])
+    }
+
+    #[cfg(feature = "rls-blacklist")]
     pub fn reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
         self.reload_with_blacklist(path_prefix, base_dir, &[])
     }
@@ -191,6 +201,13 @@ impl<L: AnalysisLoader> AnalysisHost<L> {
     }
 
     /// Reloads the entire project's analysis data.
+    #[cfg(not(feature = "rls-blacklist"))]
+    pub fn hard_reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
+        self.hard_reload_with_blacklist(path_prefix, base_dir, vec![])
+    }
+
+    /// Reloads the entire project's analysis data.
+    #[cfg(feature = "rls-blacklist")]
     pub fn hard_reload(&self, path_prefix: &Path, base_dir: &Path) -> AResult<()> {
         self.hard_reload_with_blacklist(path_prefix, base_dir, &[])
     }

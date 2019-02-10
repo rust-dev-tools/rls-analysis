@@ -60,7 +60,7 @@ pub fn read_analysis_from_files<L: AnalysisLoader>(
             for l in listing.files {
                 info!("Considering {:?}", l);
                 if let ListingKind::File(ref time) = l.kind {
-                    if ignore_data(&l.name, crate_blacklist) {
+                    if ignore_data(&l.name, crate_blacklist.clone()) {
                         continue;
                     }
 

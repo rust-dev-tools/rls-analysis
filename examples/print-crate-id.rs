@@ -45,6 +45,11 @@ fn main() {
         std::process::exit(1);
     }
     let loader = Loader::new(PathBuf::from(env::args().nth(1).unwrap()));
+
+    #[cfg(not(feature = "rls-blacklist"))]
+    let crates = rls_analysis::read_analysis_from_files(&loader, Default::default(), vec![]);
+
+    #[cfg(feature = "rls-blacklist")]
     let crates = rls_analysis::read_analysis_from_files(&loader, Default::default(), &[]);
 
     for krate in &crates {
